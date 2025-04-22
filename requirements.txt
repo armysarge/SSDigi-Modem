@@ -1,0 +1,10 @@
+PyQt5
+numpy
+scipy
+pyserial
+pyaudio
+matplotlib
+pyhamtools
+pyinstaller
+cryptography
+shuti
