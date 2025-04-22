@@ -1,5 +1,5 @@
 """
-Modem management for SS-Ham-Modem
+Modem management for SS Ham Modem
 """
 import os
 import sys
@@ -16,7 +16,7 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 class ModemManager:
-    """ARDOP modem management for SS-Ham-Modem"""
+    """ARDOP modem management for SS Ham Modem"""
 
     def __init__(self, config, license_manager, hamlib_manager=None):
         """Initialize modem manager"""
@@ -60,24 +60,72 @@ class ModemManager:
 
     def _get_ardop_binary_path(self):
         """Get path to the appropriate ARDOP binary based on platform"""
-        # Look for pre-built ARDOP binary (built during packaging)
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # Check if we're running in a PyInstaller bundle
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running in a PyInstaller bundle
+            base_dir = sys._MEIPASS
+            logger.info(f"Running from PyInstaller bundle: {base_dir}")
 
-        # Define expected binary locations
-        if sys.platform == 'win32':
-            binary_path = os.path.join(base_dir, "bin", "ardop", "windows", "ardop.exe")
-        elif sys.platform.startswith('linux'):
-            binary_path = os.path.join(base_dir, "bin", "ardop", "linux", "ardop")
+            # In PyInstaller bundle, binaries should be in the 'bin' directory
+            if sys.platform == 'win32':
+                binary_path = os.path.join(base_dir, "bin", "ardop.exe")
+            elif sys.platform.startswith('linux'):
+                binary_path = os.path.join(base_dir, "bin", "ardop")
+            else:
+                logger.error(f"Unsupported platform: {sys.platform}")
+                return None
         else:
-            logger.error(f"Unsupported platform: {sys.platform}")
-            return None
+            # Running in development environment
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+            # Define expected binary locations for development
+            if sys.platform == 'win32':
+                binary_path = os.path.join(base_dir, "bin", "ardop", "windows", "ardop.exe")
+                # Also check if ardop is in the root ardop directory (from building)
+                if not os.path.exists(binary_path):
+                    alt_path = os.path.join(base_dir, "ardop", "ardopcf.exe")
+                    if os.path.exists(alt_path):
+                        binary_path = alt_path
+            elif sys.platform.startswith('linux'):
+                binary_path = os.path.join(base_dir, "bin", "ardop", "linux", "ardop")
+                # Also check if ardop is in the root ardop directory (from building)
+                if not os.path.exists(binary_path):
+                    alt_path = os.path.join(base_dir, "ardop", "ardopcf")
+                    if os.path.exists(alt_path):
+                        binary_path = alt_path
+            else:
+                logger.error(f"Unsupported platform: {sys.platform}")
+                return None
 
         # Check if binary exists
         if os.path.exists(binary_path):
-            logger.info(f"Using existing ARDOP binary: {binary_path}")
+            logger.info(f"Found ARDOP binary: {binary_path}")
             return binary_path
         else:
             logger.warning(f"ARDOP binary not found at {binary_path}")
+
+            # Try a last resort search in common locations
+            if sys.platform == 'win32':
+                for possible_name in ["ardop.exe", "ardopcf.exe"]:
+                    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                        # Check in PyInstaller bundle root
+                        possible_path = os.path.join(sys._MEIPASS, possible_name)
+                        if os.path.exists(possible_path):
+                            logger.info(f"Found ARDOP binary in bundle root: {possible_path}")
+                            return possible_path
+
+                    # Check in the same directory as the executable
+                    possible_path = os.path.join(os.path.dirname(sys.executable), possible_name)
+                    if os.path.exists(possible_path):
+                        logger.info(f"Found ARDOP binary next to executable: {possible_path}")
+                        return possible_path
+
+                    # Check in current working directory
+                    possible_path = os.path.join(os.getcwd(), possible_name)
+                    if os.path.exists(possible_path):
+                        logger.info(f"Found ARDOP binary in current directory: {possible_path}")
+                        return possible_path
+
             return None
 
     def connect(self):

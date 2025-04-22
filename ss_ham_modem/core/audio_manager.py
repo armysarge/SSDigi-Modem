@@ -1,5 +1,5 @@
 """
-Audio management for SS-Ham-Modem
+Audio management for SS Ham Modem
 """
 import pyaudio
 import numpy as np
@@ -12,7 +12,7 @@ import wave
 logger = logging.getLogger(__name__)
 
 class AudioManager:
-    """Audio device management for SS-Ham-Modem"""
+    """Audio device management for SS Ham Modem"""
 
     def __init__(self, config):
         """Initialize audio manager"""

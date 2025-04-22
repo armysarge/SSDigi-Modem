@@ -1,5 +1,5 @@
 """
-Configuration management for SS-Ham-Modem
+Configuration management for SS Ham Modem
 """
 import os
 import json
@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class Config:
-    """Configuration manager for SS-Ham-Modem application"""
+    """Configuration manager for SS Ham Modem application"""
 
     DEFAULT_CONFIG = {
         "audio": {

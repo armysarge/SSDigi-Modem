@@ -1,5 +1,5 @@
 """
-HAMLIB rig control integration for SS-Ham-Modem
+HAMLIB rig control integration for SS Ham Modem
 """
 import logging
 import socket
@@ -14,7 +14,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class HamlibManager:
-    """HAMLIB rig control for SS-Ham-Modem"""
+    """HAMLIB rig control for SS Ham Modem"""
 
     def __init__(self, config):
         """Initialize HAMLIB manager"""

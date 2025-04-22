@@ -1,5 +1,5 @@
 """
-License dialog for SS-Ham-Modem
+License dialog for SS Ham Modem
 """
 import logging
 import os
@@ -14,7 +14,7 @@ from PyQt5.QtGui import QDesktopServices
 logger = logging.getLogger(__name__)
 
 class LicenseDialog(QDialog):
-    """License dialog for SS-Ham-Modem application"""
+    """License dialog for SS Ham Modem application"""
 
     def __init__(self, license_manager, parent=None):
         """Initialize license dialog"""
@@ -23,7 +23,7 @@ class LicenseDialog(QDialog):
         self.license_manager = license_manager
 
         # Create UI
-        self.setWindowTitle("SS-Ham-Modem License")
+        self.setWindowTitle("SS Ham Modem License")
         self.setMinimumWidth(500)
         self.setMinimumHeight(400)
 
@@ -125,7 +125,7 @@ class LicenseDialog(QDialog):
 
         # Features explanation
         features_label = QLabel(
-            "SS-Ham-Modem is available in different tiers with increasing capabilities. "
+            "SS Ham Modem is available in different tiers with increasing capabilities. "
             "Upgrade your license to unlock more features and higher performance limits."
         )
         features_label.setWordWrap(True)
@@ -224,7 +224,7 @@ class LicenseDialog(QDialog):
 
         # Purchase information
         purchase_label = QLabel(
-            "Upgrade your SS-Ham-Modem to unlock additional features and capabilities. "
+            "Upgrade your SS Ham Modem to unlock additional features and capabilities. "
             "Choose the tier that best fits your needs."
         )
         purchase_label.setWordWrap(True)
@@ -404,11 +404,11 @@ class LicenseDialog(QDialog):
     @pyqtSlot()
     def _open_basic_purchase(self):
         """Open browser to purchase basic license"""
-        url = QUrl("https://www.ss-ham-modem.com/purchase/basic")
+        url = QUrl("https://www.SS Ham Modem.com/purchase/basic")
         QDesktopServices.openUrl(url)
 
     @pyqtSlot()
     def _open_pro_purchase(self):
         """Open browser to purchase pro license"""
-        url = QUrl("https://www.ss-ham-modem.com/purchase/pro")
+        url = QUrl("https://www.SS Ham Modem.com/purchase/pro")
         QDesktopServices.openUrl(url)

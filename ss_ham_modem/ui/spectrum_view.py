@@ -1,5 +1,5 @@
 """
-Spectrum visualization for SS-Ham-Modem
+Spectrum visualization for SS Ham Modem
 """
 import numpy as np
 import logging

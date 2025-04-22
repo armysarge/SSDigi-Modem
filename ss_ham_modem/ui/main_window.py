@@ -1,5 +1,5 @@
 """
-Main window for SS-Ham-Modem application
+Main window for SS Ham Modem application
 """
 import os
 import logging
@@ -23,7 +23,7 @@ from ss_ham_modem.core.hamlib_manager import HamlibManager
 logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
-    """Main window for SS-Ham-Modem application"""
+    """Main window for SS Ham Modem application"""
 
     def __init__(self, config, license_manager):
         """Initialize main window"""
@@ -38,7 +38,7 @@ class MainWindow(QMainWindow):
         self.hamlib_manager = HamlibManager(self.config)
 
         # Set up window properties
-        self.setWindowTitle("SS-Ham-Modem")
+        self.setWindowTitle("SS Ham Modem")
         self.setMinimumSize(800, 600)
 
         # Create central widget and layout
@@ -544,8 +544,8 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     def open_about_dialog(self):
         """Open about dialog"""
-        QMessageBox.about(self, "About SS-Ham-Modem",
-                        "SS-Ham-Modem\n"
+        QMessageBox.about(self, "About SS Ham Modem",
+                        "SS Ham Modem\n"
                         "Version: 0.1.0\n\n"
                         "A digital modem application for amateur radio.\n"
                         "Based on ARDOP protocol.\n\n"

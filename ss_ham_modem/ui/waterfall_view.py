@@ -1,5 +1,5 @@
 """
-Waterfall visualization for SS-Ham-Modem
+Waterfall visualization for SS Ham Modem
 """
 import numpy as np
 import logging

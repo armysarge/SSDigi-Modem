@@ -176,8 +176,8 @@ def copy_resources():
         os.makedirs(bin_dir, exist_ok=True)
 
         # Copy ARDOP binaries
-        ardop_src = os.path.join(BASE_DIR, "ardop")
-        ardop_dst = os.path.join(bin_dir, "ardop")
+        ardop_src = os.path.join(BASE_DIR, "ardop.exe")
+        ardop_dst = os.path.join(bin_dir, "ardop.exe")
 
         if os.path.exists(ardop_src):
             if os.path.exists(ardop_dst):
@@ -277,15 +277,16 @@ def build_with_pyinstaller(target_platform):
             "--noconfirm",
             "--clean",
             "--name", app_name,
-            "--windowed",  # Use windowed mode to hide console
+            #"--windowed",  # Use windowed mode to hide console
+            "--console"  # Use console mode for debugging
         ]
 
         # Add icon option if available
         pyinst_cmd.extend(icon_option)
-
         # Add remaining options
         pyinst_cmd.extend([
-            "--add-data", f"{os.path.join(TEMP_DIR, 'bin')}{separator}bin",
+            # Include only the ss_ham_modem/bin folder which contains just the ardop.exe file
+            "--add-data", f"{os.path.join(BASE_DIR, 'ss_ham_modem', 'bin')}{separator}bin",
             "--distpath", DIST_DIR,
             "--workpath", BUILD_DIR,
             # Add hidden imports for PyQt5
@@ -727,9 +728,7 @@ def main():
     # Copy resources
     if not copy_resources():
         logger.error("Failed to copy resources. Aborting.")
-        return 1
-
-    # Handle code (obfuscated or not)
+        return 1    # Handle code (obfuscated or not)
     if args.obfuscate:
         if not obfuscate_code():
             logger.error("Failed to obfuscate code. Aborting.")
@@ -764,6 +763,16 @@ def main():
     for platform_name in platforms:
         bin_dir = os.path.join(BASE_DIR, "bin", "ardop", platform_name.lower())
         os.makedirs(bin_dir, exist_ok=True)
+
+    # Prepare ARDOP binaries for packaging
+    logger.info("Preparing ARDOP binaries for packaging...")
+    try:
+        prepare_script = os.path.join(BASE_DIR, "tools", "prepare_ardop.py")
+        result = subprocess.run([sys.executable, prepare_script], check=True, capture_output=True, text=True)
+        logger.info(f"ARDOP binary preparation: {result.stdout.strip()}")
+    except Exception as e:
+        logger.warning(f"Failed to prepare ARDOP binaries: {e}")
+        logger.warning("Continuing without ARDOP binary preparation...")
 
     # Build for each platform
     success = True

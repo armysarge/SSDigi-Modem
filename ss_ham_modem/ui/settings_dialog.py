@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout,
                             QLabel, QPushButton, QComboBox, QCheckBox,
                             QSpinBox, QDoubleSpinBox, QLineEdit, QGroupBox,
                             QFormLayout, QFileDialog, QDialogButtonBox,
-                            QMessageBox, QSlider, QWidget)ngs dialog for SS-Ham-Modem
+                            QMessageBox, QSlider, QWidget)ngs dialog for SS Ham Modem
 """
 import logging
 import os
@@ -17,7 +17,7 @@ from PyQt5.QtCore import Qt, pyqtSlot
 logger = logging.getLogger(__name__)
 
 class SettingsDialog(QDialog):
-    """Settings dialog for SS-Ham-Modem application"""
+    """Settings dialog for SS Ham Modem application"""
 
     def __init__(self, config, license_manager, parent=None):
         """Initialize settings dialog"""
@@ -27,7 +27,7 @@ class SettingsDialog(QDialog):
         self.license_manager = license_manager
 
         # Create UI
-        self.setWindowTitle("SS-Ham-Modem Settings")
+        self.setWindowTitle("SS Ham Modem Settings")
         self.setMinimumWidth(600)
         self.setMinimumHeight(500)
 
