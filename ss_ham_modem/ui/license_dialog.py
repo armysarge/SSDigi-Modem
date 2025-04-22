@@ -9,7 +9,8 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                             QDialogButtonBox, QMessageBox, QTabWidget,
                             QTextEdit, QWidget, QProgressBar)
 from PyQt5.QtCore import Qt, pyqtSlot, QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtGui import QDesktopServices, QIcon
+from ss_ham_modem.utils.ui_helpers import get_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,13 @@ class LicenseDialog(QDialog):
         # Create UI
         self.setWindowTitle("SS Ham Modem License")
         self.setMinimumWidth(500)
-        self.setMinimumHeight(400)
+        self.setMinimumHeight(400)        # Set application icon
+        try:
+            icon_path = get_app_icon()
+            if icon_path:
+                self.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            logger.warning(f"Could not set window icon: {e}")
 
         # Create layout
         main_layout = QVBoxLayout(self)
@@ -36,7 +43,7 @@ class LicenseDialog(QDialog):
 
         # Create license tabs
         self._create_status_tab()
-        self._create_activation_tab()
+
         self._create_features_tab()
         self._create_purchase_tab()
 
@@ -59,64 +66,25 @@ class LicenseDialog(QDialog):
 
         self.status_label = QLabel("Free Version")
         self.name_label = QLabel("Not licensed")
-        self.expiry_label = QLabel("N/A")
         self.machine_id_label = QLabel(self.license_manager.machine_id)
 
         info_layout.addRow("Status:", self.status_label)
         info_layout.addRow("Licensed To:", self.name_label)
-        info_layout.addRow("Expiry Date:", self.expiry_label)
         info_layout.addRow("Machine ID:", self.machine_id_label)
 
         info_group.setLayout(info_layout)
         layout.addWidget(info_group)
 
-        # Deactivate button
-        self.deactivate_button = QPushButton("Deactivate License")
-        self.deactivate_button.clicked.connect(self._deactivate_license)
-        layout.addWidget(self.deactivate_button)
+        # License status message
+        self.license_info_label = QLabel("License activation is automatic when a valid license file is present.")
+        self.license_info_label.setWordWrap(True)
+        layout.addWidget(self.license_info_label)
 
         # Add stretch
         layout.addStretch(1)
 
         # Add to tab widget
         self.tab_widget.addTab(status_tab, "Status")
-
-    def _create_activation_tab(self):
-        """Create license activation tab"""
-        activation_tab = QWidget()
-        layout = QVBoxLayout(activation_tab)
-
-        # Activation form
-        activation_group = QGroupBox("License Activation")
-        activation_layout = QFormLayout()
-
-        self.license_key_edit = QLineEdit()
-        self.license_key_edit.setPlaceholderText("Enter your license key here")
-
-        activation_layout.addRow("License Key:", self.license_key_edit)
-
-        # Activation button
-        self.activate_button = QPushButton("Activate License")
-        self.activate_button.clicked.connect(self._activate_license)
-        activation_layout.addRow("", self.activate_button)
-
-        activation_group.setLayout(activation_layout)
-        layout.addWidget(activation_group)
-
-        # Note about license
-        note_label = QLabel(
-            "Note: License is tied to this machine. If you need to transfer your "
-            "license to another machine, please deactivate it first and then "
-            "contact support for assistance."
-        )
-        note_label.setWordWrap(True)
-        layout.addWidget(note_label)
-
-        # Add stretch
-        layout.addStretch(1)
-
-        # Add to tab widget
-        self.tab_widget.addTab(activation_tab, "Activation")
 
     def _create_features_tab(self):
         """Create features tab"""
@@ -304,12 +272,6 @@ class LicenseDialog(QDialog):
             else:
                 self.name_label.setText("Not licensed")
 
-            if license_info['expiration_date']:
-                exp_date = datetime.datetime.fromisoformat(license_info['expiration_date'])
-                self.expiry_label.setText(exp_date.strftime("%Y-%m-%d"))
-            else:
-                self.expiry_label.setText("N/A")
-
             # Update features tab
             self.tier_label.setText(license_info['tier'].capitalize())
 
@@ -323,83 +285,8 @@ class LicenseDialog(QDialog):
 
             self.tier_features.setText(features_text)
 
-            # Enable/disable buttons based on license status
-            if license_info['tier'] == 'free':
-                self.deactivate_button.setEnabled(False)
-            else:
-                self.deactivate_button.setEnabled(True)
-
         except Exception as e:
             logger.exception(f"Error updating license info: {e}")
-
-    @pyqtSlot()
-    def _activate_license(self):
-        """Activate license with entered key"""
-        license_key = self.license_key_edit.text().strip()
-
-        if not license_key:
-            QMessageBox.warning(self, "Activation Error", "Please enter a license key.")
-            return
-
-        try:
-            # Show progress dialog
-            progress = QProgressBar(self)
-            progress.setRange(0, 0)  # Indeterminate
-            progress.setTextVisible(False)
-
-            layout = self.layout()
-            layout.addWidget(progress)
-
-            # Process activation
-            if self.license_manager.activate(license_key):
-                # Remove progress bar
-                progress.setParent(None)
-
-                QMessageBox.information(self, "License Activated",
-                                      "Your license has been activated successfully!")
-
-                # Update license info display
-                self._update_license_info()
-
-                # Switch to status tab
-                self.tab_widget.setCurrentIndex(0)
-
-                # Clear license key field
-                self.license_key_edit.clear()
-            else:
-                # Remove progress bar
-                progress.setParent(None)
-
-                QMessageBox.warning(self, "Activation Failed",
-                                  "Failed to activate license. Please check your license key and try again.")
-        except Exception as e:
-            logger.exception(f"Error activating license: {e}")
-            QMessageBox.critical(self, "Activation Error",
-                               f"An error occurred during activation: {str(e)}")
-
-    @pyqtSlot()
-    def _deactivate_license(self):
-        """Deactivate current license"""
-        reply = QMessageBox.question(self, "Deactivate License",
-                                    "Are you sure you want to deactivate your license? "
-                                    "The application will revert to the free version.",
-                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-
-        if reply == QMessageBox.Yes:
-            try:
-                if self.license_manager.deactivate():
-                    QMessageBox.information(self, "License Deactivated",
-                                          "Your license has been deactivated successfully.")
-
-                    # Update license info display
-                    self._update_license_info()
-                else:
-                    QMessageBox.warning(self, "Deactivation Failed",
-                                      "Failed to deactivate license.")
-            except Exception as e:
-                logger.exception(f"Error deactivating license: {e}")
-                QMessageBox.critical(self, "Deactivation Error",
-                                   f"An error occurred during deactivation: {str(e)}")
 
     @pyqtSlot()
     def _open_basic_purchase(self):

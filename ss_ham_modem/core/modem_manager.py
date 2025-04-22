@@ -25,15 +25,19 @@ class ModemManager:
         self.hamlib_manager = hamlib_manager
         self.connected = False
         self.ardop_process = None
-        self.fft_data = np.zeros(config.get('ui', 'fft_size') // 2)
-
-        # Communication settings
+        self.fft_data = np.zeros(config.get('ui', 'fft_size') // 2)        # Communication settings
         self.mode = config.get('modem', 'mode')
         self.bandwidth = int(config.get('modem', 'bandwidth'))
         self.center_freq = config.get('modem', 'center_freq')
 
-        # Get callsign from config, will be overridden by license if available
-        self.callsign = config.get('modem', 'callsign', '')
+        # Get callsign - prioritize license callsign if available
+        licensed_callsign = license_manager.get_callsign()
+        if licensed_callsign:
+            self.callsign = licensed_callsign
+            logger.info(f"Using licensed callsign: {self.callsign}")
+        else:
+            self.callsign = config.get('user', 'callsign', '')
+            logger.info(f"Using configured callsign: {self.callsign}")
 
         # Status information
         self.status = {
@@ -134,6 +138,11 @@ class ModemManager:
             logger.warning("Modem already connected")
             return True
 
+        # Verify that a callsign is set before connecting
+        if not self.callsign or self.callsign == "":
+            logger.error("Cannot connect: No callsign is set")
+            return False
+
         try:
             # Check license restrictions
             feature_limits = self.license_manager.get_feature_limits()
@@ -141,7 +150,7 @@ class ModemManager:
                 logger.warning(f"Bandwidth {self.bandwidth} exceeds license limit {feature_limits['max_bandwidth']}")
                 self.bandwidth = feature_limits['max_bandwidth']
                 self.config.set('modem', 'bandwidth', self.bandwidth)
-                self.config.save()            # Check if we have a valid ARDOP binary
+                self.config.save()# Check if we have a valid ARDOP binary
             if not self.ardop_path or not os.path.exists(self.ardop_path):
                 logger.warning(f"ARDOP binary not found, falling back to simulation mode")
                 self._start_simulation()
@@ -729,3 +738,38 @@ class ModemManager:
         except Exception as e:
             logger.exception(f"Error building ARDOP: {e}")
             return None
+
+    def update_from_config(self):
+        """Update modem settings from the configuration
+
+        This should be called when configuration changes, especially
+        for settings like callsign that may be enforced by license.
+        """
+        # Update bandwidth and center frequency from config
+        self.bandwidth = int(self.config.get('modem', 'bandwidth'))
+        self.center_freq = self.config.get('modem', 'center_freq')
+
+        # Update callsign - always prioritize license callsign if available
+        licensed_callsign = self.license_manager.get_callsign()
+        if licensed_callsign:
+            if self.callsign != licensed_callsign:
+                logger.info(f"ModemManager: Updating callsign from license: {licensed_callsign}")
+                self.callsign = licensed_callsign
+        else:
+            # Use callsign from config if no license callsign available
+            config_callsign = self.config.get('user', 'callsign', '')
+            if self.callsign != config_callsign:
+                logger.info(f"ModemManager: Updating callsign from config: {config_callsign}")
+                self.callsign = config_callsign
+
+        # Update status information
+        self.status.update({
+            'mode': self.mode,
+            'bandwidth': self.bandwidth,
+        })
+
+        # If connected, apply changes immediately
+        if self.connected:
+            logger.info("ModemManager: Applying configuration changes to active connection")
+            # Implementation depends on your modem interface
+            # This might involve sending commands to update settings

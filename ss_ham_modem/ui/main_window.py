@@ -19,6 +19,7 @@ from ss_ham_modem.ui.license_dialog import LicenseDialog
 from ss_ham_modem.core.audio_manager import AudioManager
 from ss_ham_modem.core.modem_manager import ModemManager
 from ss_ham_modem.core.hamlib_manager import HamlibManager
+from ss_ham_modem.utils.ui_helpers import get_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +36,12 @@ class MainWindow(QMainWindow):
         # Initialize managers
         self.audio_manager = AudioManager(self.config)
         self.modem_manager = ModemManager(self.config, self.license_manager)
-        self.hamlib_manager = HamlibManager(self.config)
-
-        # Set up window properties
+        self.hamlib_manager = HamlibManager(self.config)        # Set up window properties
         self.setWindowTitle("SS Ham Modem")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(800, 600)        # Set application icon
+        icon_path = get_app_icon()
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
 
         # Create central widget and layout
         self.central_widget = QWidget()
@@ -342,10 +344,6 @@ class MainWindow(QMainWindow):
         if license_info['licensed_to']:
             status_text += f" | Licensed to: {license_info['licensed_to']}"
 
-        if license_info['expiration_date']:
-            exp_date = datetime.datetime.fromisoformat(license_info['expiration_date'])
-            status_text += f" | Expires: {exp_date.strftime('%Y-%m-%d')}"
-
         self.status_bar.showMessage(status_text)
 
     @pyqtSlot()
@@ -363,6 +361,15 @@ class MainWindow(QMainWindow):
 
             # Configure audio devices
             self.audio_manager.set_devices(input_idx, output_idx)
+
+            # Check if callsign is configured
+            callsign = self.config.get('user', 'callsign', '')
+            if not callsign:
+                QMessageBox.warning(self, "Missing Callsign",
+                                  "A valid callsign is required to connect to the modem.\n\n"
+                                  "Please set your callsign in Settings > Station.")
+                logger.error("Connection attempt failed: No callsign configured")
+                return
 
             # Start modem
             if self.modem_manager.connect():
@@ -552,48 +559,30 @@ class MainWindow(QMainWindow):
                         "Copyright © 2025")
 
     def update_from_config(self):
-        """Update UI elements based on current configuration"""
-        # Update input device
-        input_device = self.config.get('audio', 'input_device')
-        if input_device is not None:
-            index = self.input_device_combo.findData(input_device)
-            if index >= 0:
-                self.input_device_combo.setCurrentIndex(index)
+        """Update UI components when configuration changes"""
+        logger.info("Updating UI from configuration")
 
-        # Update output device
-        output_device = self.config.get('audio', 'output_device')
-        if output_device is not None:
-            index = self.output_device_combo.findData(output_device)
-            if index >= 0:
-                self.output_device_combo.setCurrentIndex(index)
+        # Update license status to reflect any changes
+        self.update_license_status()
 
-        # Update bandwidth
-        bandwidth = self.config.get('modem', 'bandwidth')
-        index = self.bandwidth_combo.findData(bandwidth)
+        # Check for licensed callsign and enforce it if needed
+        licensed_callsign = self.license_manager.get_callsign()
+        if licensed_callsign:
+            # Re-apply the callsign from license to ensure it's enforced
+            self.config.enforce_licensed_callsign(licensed_callsign)
+            logger.info(f"Enforcing licensed callsign: {licensed_callsign}")
+
+        # Update modem with current callsign
+        if hasattr(self.modem_manager, 'update_from_config'):
+            self.modem_manager.update_from_config()
+
+        # Update UI elements that depend on configuration
+        # Bandwidths may be limited by license
+        current_bw = self.config.get('modem', 'bandwidth')
+        index = self.bandwidth_combo.findData(current_bw)
         if index >= 0:
             self.bandwidth_combo.setCurrentIndex(index)
-
-        # Update center frequency
-        center_freq = self.config.get('modem', 'center_freq')
-        index = self.center_freq_combo.findData(center_freq)
-        if index >= 0:
-            self.center_freq_combo.setCurrentIndex(index)
 
         # Update status labels
         self.status_labels['mode'].setText(self.config.get('modem', 'mode'))
         self.status_labels['bandwidth'].setText(f"{self.config.get('modem', 'bandwidth')} Hz")
-
-        # Update spectrum and waterfall settings
-        self.spectrum_view.update_settings(self.config)
-        self.waterfall_view.update_settings(self.config)
-
-        # Update spectrum update rate
-        update_rate = self.config.get('ui', 'spectrum_update_rate')
-        self.spectrum_timer.setInterval(1000 // update_rate)
-
-        # Update HAMLIB status if enabled
-        hamlib_config = self.config.get('hamlib')
-        if hamlib_config['enabled']:
-            self.hamlib_enabled_label.setText("Enabled (not connected)")
-            self.hamlib_rig_label.setText(str(hamlib_config['rig_model']))
-            self.hamlib_ptt_label.setText(hamlib_config['ptt_control'])

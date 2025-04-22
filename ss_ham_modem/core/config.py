@@ -26,6 +26,9 @@ class Config:
             "squelch": 3,  # Default squelch level
             "tx_level": 0.5,  # Default transmit audio level (0-1.0)
         },
+        "user": {
+            "callsign": "",  # User's amateur radio callsign
+        },
         "hamlib": {
             "enabled": False,
             "rig_model": 1,  # Default to Dummy rig
@@ -116,3 +119,50 @@ class Config:
                 self._recursive_update(d[k], v)
             else:
                 d[k] = v
+
+    def get_callsign(self):
+        """Get the current callsign from configuration"""
+        return self.data.get("user", {}).get("callsign", "")
+
+    def set_callsign(self, callsign, force=False):
+        """Set the callsign in configuration
+
+        Args:
+            callsign: The callsign to set
+            force: If True, set the callsign even if it's already set (for license enforcement)
+
+        Returns:
+            bool: True if the callsign was set, False if blocked (e.g., by license)
+        """
+        if not "user" in self.data:
+            self.data["user"] = {}
+
+        # Skip if the callsign is already the same
+        current = self.data["user"].get("callsign", "")
+        if current == callsign:
+            return True
+
+        # Only set if force=True or if we're setting for the first time
+        if force or not current:
+            self.data["user"]["callsign"] = callsign
+            return True
+
+        return False
+
+    def enforce_licensed_callsign(self, licensed_callsign):
+        """Enforce the licensed callsign, overriding any manually set callsign
+
+        This should be called whenever the application starts with a valid license
+        to ensure the callsign from the license is used.
+
+        Args:
+            licensed_callsign: The callsign from the valid license
+
+        Returns:
+            bool: True if the callsign was enforced or already correct
+        """
+        if not licensed_callsign:
+            return False
+
+        # Force-set the licensed callsign
+        return self.set_callsign(licensed_callsign, force=True)

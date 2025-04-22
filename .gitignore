@@ -19,6 +19,7 @@ wheels/
 .installed.cfg
 *.egg
 *.spec
+*.dat
 
 # PyInstaller build artifacts
 build/

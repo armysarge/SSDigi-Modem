@@ -35,7 +35,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="SS Ham Modem - Digital modem for amateur radio")
     parser.add_argument("--config", help="Path to config file")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    parser.add_argument("--license", help="License key for premium features")
+    parser.add_argument("--license-file", help="Path to license file for premium features")
 
     return parser.parse_args()
 
@@ -62,10 +62,21 @@ def main():
 
     # Initialize license manager
     license_manager = LicenseManager()
-    if args.license:
-        license_manager.activate(args.license)
+    if args.license_file:
+        license_manager.activate(args.license_file)
     else:
         license_manager.check_existing_license()
+
+    # If a valid license is present, enforce the callsign from the license
+    licensed_callsign = license_manager.get_callsign()
+    if licensed_callsign:
+        logger.info(f"Valid license detected with callsign: {licensed_callsign}")
+        config.enforce_licensed_callsign(licensed_callsign)
+        # Save the configuration with the enforced callsign
+        config.save()
+        logger.info("License callsign enforced in configuration")
+    else:
+        logger.info("No licensed callsign detected, using configuration callsign")
 
     # Start Qt application
     app = QApplication(sys.argv)

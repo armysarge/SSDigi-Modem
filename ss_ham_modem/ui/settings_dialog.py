@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout,
                             QFormLayout, QFileDialog, QDialogButtonBox,
                             QMessageBox, QSlider, QWidget)
 from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtGui import QIcon
+from ss_ham_modem.utils.ui_helpers import get_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,13 @@ class SettingsDialog(QDialog):
         # Create UI
         self.setWindowTitle("SS Ham Modem Settings")
         self.setMinimumWidth(600)
-        self.setMinimumHeight(500)
+        self.setMinimumHeight(500)        # Set application icon
+        try:
+            icon_path = get_app_icon()
+            if icon_path:
+                self.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            logger.warning(f"Could not set window icon: {e}")
 
         # Create layout
         main_layout = QVBoxLayout(self)
@@ -130,9 +138,14 @@ class SettingsDialog(QDialog):
         # ARDOP advanced settings
         advanced_group = QGroupBox("Station Details")
         advanced_layout = QFormLayout()
-
         self.callsign_edit = QLineEdit()
         self.callsign_edit.setMaxLength(10)
+        # Check if licensed callsign is present - if so, disable editing
+        licensed_callsign = self.license_manager.get_callsign()
+        if licensed_callsign:
+            self.callsign_edit.setText(licensed_callsign)
+            self.callsign_edit.setEnabled(False)
+            self.callsign_edit.setToolTip("Callsign is locked by your license")
         advanced_layout.addRow("Callsign:", self.callsign_edit)
 
         self.grid_square_edit = QLineEdit()
@@ -306,9 +319,6 @@ class SettingsDialog(QDialog):
             self.output_combo.addItem("Default Output Device", None)
             self.output_combo.addItem("Speakers", 1)
             self.output_combo.addItem("Headphones", 2)
-
-            QMessageBox.information(self, "Audio Devices",
-                                   "Audio devices refreshed successfully.")
         except Exception as e:
             logger.exception(f"Error refreshing audio devices: {e}")
             QMessageBox.warning(self, "Error",
@@ -428,6 +438,17 @@ class SettingsDialog(QDialog):
             self.config.set('ui', 'fft_average', self.average_check.isChecked())
             self.config.set('ui', 'peak_hold', self.peak_hold_check.isChecked())
 
+            # Handle callsign - check if there's a licensed callsign first
+            licensed_callsign = self.license_manager.get_callsign()
+            if licensed_callsign:
+                # Always use the licensed callsign, ignore any user edits
+                self.config.set('user', 'callsign', licensed_callsign)
+                logger.info(f"Using licensed callsign: {licensed_callsign} (user edits ignored)")
+            else:
+                # No license callsign, use the user-provided value
+                self.config.set('user', 'callsign', self.callsign_edit.text())
+                logger.info(f"Using user-provided callsign: {self.callsign_edit.text()}")
+
             # Save config
             self.config.save()
 
@@ -481,3 +502,10 @@ class SettingsDialog(QDialog):
             logger.exception(f"Error testing PTT: {e}")
             QMessageBox.warning(self, "Error",
                               f"Failed to test PTT: {str(e)}")
+
+    def showEvent(self, event):
+        """Override showEvent to refresh audio devices when dialog opens"""
+        super().showEvent(event)
+        # Automatically refresh audio devices when dialog is opened
+        self._refresh_audio_devices()
+        logger.info("Settings dialog opened, audio devices refreshed")

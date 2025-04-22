@@ -182,14 +182,9 @@ class LicenseManager:
                 # Note: The callsign will be verified when the modem is started
                 if 'callsign' not in license_data:
                     logger.warning("License does not contain a callsign")
-                    return False                # Check if expiration date exists (for backward compatibility)
-                # New licenses are lifetime and don't have expiration dates
-                if 'expiration_date' in license_data:
-                    exp_date = datetime.datetime.fromisoformat(license_data['expiration_date'])
-                    if exp_date < datetime.datetime.now():
-                        logger.warning("License has expired")
-                        return False
-                    self.expiration_date = exp_date# Set license information
+                    return False
+
+
                 self.current_tier = license_data.get('tier', 'free')
                 self.licensed_to = license_data.get('name', '')
                 self.callsign = license_data.get('callsign', '')
@@ -205,51 +200,38 @@ class LicenseManager:
             logger.error(f"Error reading license file: {e}")
             return False
 
-    def activate(self, license_key=None, license_file_path=None):
-        """Activate using either a license file or a license key
+    def activate(self, license_file_path):
+        """Activate a license by importing a license file
 
-        This method now focuses on importing existing license files rather than generating them.
+        This method imports an existing license file from the given path.
         License files are created by the separate license generator tool.
+
+        Args:
+            license_file_path: Path to the license file
+
+        Returns:
+            bool: True if activation was successful, False otherwise
         """
         try:
-            if license_file_path:
-                # Import a license file directly
-                if not os.path.exists(license_file_path):
-                    logger.error(f"License file not found: {license_file_path}")
-                    return False
-
-                # Copy license file to the config directory
-                self.config_dir.mkdir(parents=True, exist_ok=True)
-                with open(license_file_path, 'rb') as src, open(self.license_file, 'wb') as dst:
-                    dst.write(src.read())
-
-                # Verify the imported license
-                if self.check_existing_license():
-                    logger.info(f"License file imported successfully")
-                    return True
-                else:
-                    logger.error("Imported license file is invalid")
-                    if self.license_file.exists():
-                        self.license_file.unlink()
-                    return False
-
-            elif license_key:
-                # License keys can only be used to look up previously generated license files
-                # No direct license generation from keys - must go through the license_generator tool
-                logger.error("Direct license key activation is no longer supported")
-                logger.info("Please contact support to obtain a license file for your callsign")
+            # Import a license file directly
+            if not os.path.exists(license_file_path):
+                logger.error(f"License file not found: {license_file_path}")
                 return False
 
+            # Copy license file to the config directory
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            with open(license_file_path, 'rb') as src, open(self.license_file, 'wb') as dst:
+                dst.write(src.read())
+
+            # Verify the imported license
+            if self.check_existing_license():
+                logger.info(f"License file imported successfully")
+                return True
             else:
-                logger.error("No license file or key provided")
+                logger.error("Imported license file is invalid")
+                if self.license_file.exists():
+                    self.license_file.unlink()
                 return False
-            self.current_tier = tier
-            self.licensed_to = license_data['name']
-            self.callsign = license_data['callsign']  # Store the callsign from license
-            self.expiration_date = datetime.datetime.fromisoformat(license_data['expiration_date'])
-
-            logger.info(f"License activated: {tier} tier")
-            return True
 
         except Exception as e:
             logger.error(f"License activation failed: {e}")
@@ -287,7 +269,6 @@ class LicenseManager:
             'tier': self.current_tier,
             'licensed_to': self.licensed_to,
             'callsign': self.callsign,  # Include callsign in license info
-            'expiration_date': self.expiration_date.isoformat() if self.expiration_date else None,
             'features': self.get_feature_limits()
         }
 
