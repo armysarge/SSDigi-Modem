@@ -366,8 +366,8 @@ class MainWindow(QMainWindow):
             callsign = self.config.get('user', 'callsign', '')
             if not callsign:
                 QMessageBox.warning(self, "Missing Callsign",
-                                  "A valid callsign is required to connect to the modem.\n\n"
-                                  "Please set your callsign in Settings > Station.")
+                                  "A valid callsign is required to connect to the modem.\n"
+                                  "Please set your callsign in Modem > Settings > Station.")
                 logger.error("Connection attempt failed: No callsign configured")
                 return
 

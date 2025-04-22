@@ -154,7 +154,7 @@ def create_license_file(callsign, tier, output_path=None):
         f.write(obfuscated_data)
 
     print(f"License file created: {output_path}")
-    print(f"License key: {license_key}")
+
     return license_key
 
 def main():

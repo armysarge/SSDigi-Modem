@@ -53,11 +53,11 @@ class LicenseManager:
         self.current_tier = "free"
         self.licensed_to = ""
         self.expiration_date = None
-        self.callsign = ""  # Store callsign from license - this is now the primary identifier
+        self.callsign = ""
 
         # Cryptographic key - in production you would not hardcode this
-        self._salt = b'SS Ham Modem-Salt-V'
-        self._secret_key = self._derive_key("SS Ham Modem-Secret-K")
+        self._salt = b'SS-Ham-Modem-Salt-V'  # Use same salt as license generator
+        self._secret_key = self._derive_key("SS-Ham-Modem-Secret-K")  # Use same secret key as license generator
         self._cipher = Fernet(self._secret_key)
 
     def _get_machine_id(self):
