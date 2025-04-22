@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main entry point for the SS-Ham-Modem application.
+Main entry point for the SS Ham Modem application.
 """
 import sys
 import os
@@ -32,7 +32,7 @@ def setup_logging():
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="SS-Ham-Modem - Digital modem for amateur radio")
+    parser = argparse.ArgumentParser(description="SS Ham Modem - Digital modem for amateur radio")
     parser.add_argument("--config", help="Path to config file")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument("--license", help="License key for premium features")
@@ -51,7 +51,7 @@ def main():
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    logger.info("Starting SS-Ham-Modem")
+    logger.info("Starting SS Ham Modem")
 
     # Load configuration
     config = Config()
@@ -69,8 +69,8 @@ def main():
 
     # Start Qt application
     app = QApplication(sys.argv)
-    app.setApplicationName("SS-Ham-Modem")
-    app.setOrganizationName("SS-Ham")
+    app.setApplicationName("SS Ham Modem")
+    app.setOrganizationName("XenoLabs Solutions")
 
     # Create and show main window
     main_window = MainWindow(config, license_manager)

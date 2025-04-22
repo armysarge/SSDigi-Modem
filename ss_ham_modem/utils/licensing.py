@@ -1,5 +1,5 @@
 """
-License management system for SS-Ham-Modem
+License management system for SS Ham Modem
 """
 import os
 import json
@@ -15,7 +15,7 @@ import base64
 logger = logging.getLogger(__name__)
 
 class LicenseManager:
-    """License manager for SS-Ham-Modem premium features"""
+    """License manager for SS Ham Modem premium features"""
 
     # Feature tiers
     TIERS = {
@@ -57,7 +57,7 @@ class LicenseManager:
 
         # Cryptographic key - in production you would not hardcode this
         self._salt = b'SS-Ham-Modem-Salt-V'
-        self._secret_key = self._derive_key("SS-Ham-Modem-Secret-Key")
+        self._secret_key = self._derive_key("SS-Ham-Modem-Secret-K")
         self._cipher = Fernet(self._secret_key)
 
     def _get_machine_id(self):

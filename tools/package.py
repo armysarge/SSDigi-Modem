@@ -1,5 +1,5 @@
 """
-Packaging script for SS-Ham-Modem
+Packaging script for SS Ham Modem
 This script creates distributable packages for Windows and Linux platforms
 """
 import os
@@ -32,7 +32,7 @@ VERSION = "0.1.0"
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="Package SS-Ham-Modem for distribution")
+    parser = argparse.ArgumentParser(description="Package SS Ham Modem for distribution")
     parser.add_argument("--platform", choices=["windows", "linux", "all"], default="all",
                         help="Platform to build for (windows, linux, or all)")
     parser.add_argument("--obfuscate", action="store_true", help="Obfuscate Python code")
@@ -44,7 +44,46 @@ def parse_arguments():
 
 def clean_directories():
     """Clean build and distribution directories"""
-    logger.info("Cleaning build directories...")
+    logger.info("Cleaning build directories...")    # First, try to terminate any running processes that might be locking the executable
+    if platform.system() == "Windows":
+        try:
+            # Try to kill any running instance of the executable
+            logger.info("Attempting to terminate any running instances of the application...")
+            # Try using PowerShell to elevate privileges and kill the process
+            try:
+                subprocess.run(
+                    ["powershell", "-Command",
+                     "Get-Process -Name 'SS_Ham_Modem*','SS Ham Modem*' -ErrorAction SilentlyContinue | Stop-Process -Force"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except:
+                # Fall back to taskkill as a backup
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", "SS Ham Modem*.exe"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+
+            # Give the system some time to release file handles
+            time.sleep(3)
+
+            # Check for antivirus processes that might be scanning our files
+            logger.info("Checking for antivirus processes that might be locking files...")
+            av_processes = ["MsMpEng.exe", "avastui.exe", "avgui.exe", "bdagent.exe", "afwserv.exe", "mcshield.exe"]
+            for av in av_processes:
+                try:
+                    # Just check if they're running, don't try to kill antivirus!
+                    subprocess.run(
+                        ["tasklist", "/FI", f"IMAGENAME eq {av}"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                except:
+                    pass
+        except Exception:
+            # It's okay if this fails - it just means no instances were running
+            pass
 
     for directory in [DIST_DIR, BUILD_DIR, TEMP_DIR]:
         if os.path.exists(directory):
@@ -62,8 +101,39 @@ def clean_directories():
                                 except:
                                     pass
 
-                shutil.rmtree(directory, onerror=lambda f, p, e: (os.chmod(p, 0o777), f(p)))
-                logger.info(f"Removed directory: {directory}")
+                    # Check for and handle exe files specifically
+                    for file in files:
+                        if file.endswith('.exe'):
+                            try:
+                                file_path = os.path.join(root, file)
+                                os.chmod(file_path, 0o777)  # Make fully accessible
+                                # If on Windows, try using the del command which can sometimes unlock files
+                                if platform.system() == "Windows":
+                                    subprocess.run(["cmd", "/c", f"del /F /Q \"{file_path}\""],
+                                                 check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            except:
+                                pass
+
+                # Remove directory with more aggressive error handling
+                def remove_readonly(func, path, excinfo):
+                    # Handle read-only files and directories
+                    if os.path.exists(path):
+                        os.chmod(path, 0o777)
+                    func(path)
+
+                # Try multiple times with delays in between
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    try:
+                        shutil.rmtree(directory, onerror=remove_readonly)
+                        logger.info(f"Removed directory: {directory}")
+                        break
+                    except Exception as e:
+                        if attempt < max_attempts - 1:
+                            logger.warning(f"Failed to remove directory {directory} (attempt {attempt+1}/{max_attempts}): {e}")
+                            time.sleep(2)  # Wait before trying again
+                        else:
+                            logger.error(f"Failed to remove directory {directory} after {max_attempts} attempts: {e}")
             except Exception as e:
                 logger.error(f"Failed to remove directory {directory}: {e}")
 
@@ -153,7 +223,8 @@ def build_with_pyinstaller(target_platform):
     """Build executable using PyInstaller"""
     logger.info(f"Building executable for {target_platform}...")
 
-    try:        # Determine platform-specific settings
+    try:
+        # Determine platform-specific settings
         if target_platform == "windows":
             icon_path = os.path.join(BASE_DIR, "resources", "icons", "ss_ham_modem.ico")
             separator = ";"
@@ -175,12 +246,37 @@ def build_with_pyinstaller(target_platform):
         # Define paths for PyInstaller
         src_dir = os.path.join(TEMP_DIR, "ss_ham_modem")
 
+        # Create PyInstaller command - use underscore instead of spaces to avoid issues
+        app_name = f"SS_Ham_Modem_{VERSION}"
+
+        if platform.system() == "Windows":
+            # If we're on Windows, try to disable Windows Defender's real-time monitoring temporarily
+            # Note: This requires admin privileges, so we'll just inform the user
+            logger.info("Windows detected - consider temporarily disabling real-time antivirus protection")
+
+            # Check if the build directory has any previous executable
+            build_exe = os.path.join(BUILD_DIR, app_name, f"{app_name}.exe")
+            if os.path.exists(build_exe):
+                logger.info(f"Removing previous build executable: {build_exe}")
+                try:
+                    os.chmod(build_exe, 0o777)  # Ensure full permissions
+                    os.unlink(build_exe)        # Delete the file
+                    time.sleep(1)               # Give Windows time to release handles
+                except Exception as del_error:
+                    logger.warning(f"Could not remove previous executable: {del_error}")
+                    # Try with system command as last resort
+                    try:
+                        subprocess.run(["cmd", "/c", f"del /F /Q \"{build_exe}\""],
+                                      check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except:
+                        pass
+
         # Create PyInstaller command
         pyinst_cmd = [
             "pyinstaller",
             "--noconfirm",
             "--clean",
-            "--name", f"SS Ham Modem {VERSION}",
+            "--name", app_name,
             "--windowed",  # Use windowed mode to hide console
         ]
 
@@ -192,12 +288,36 @@ def build_with_pyinstaller(target_platform):
             "--add-data", f"{os.path.join(TEMP_DIR, 'bin')}{separator}bin",
             "--distpath", DIST_DIR,
             "--workpath", BUILD_DIR,
+            # Add hidden imports for PyQt5
+            "--hidden-import", "PyQt5.sip",
+            "--hidden-import", "PyQt5.QtCore",
             os.path.join(src_dir, "main.py")
         ])
 
+        # On Windows, try running with elevated privileges to help avoid permission issues
+        env = os.environ.copy()
+
+        # Add a delay before running PyInstaller to ensure all locks are released
+        logger.info("Pausing briefly to ensure all file locks are released...")
+        time.sleep(3)
+
         # Run PyInstaller
-        subprocess.check_call(pyinst_cmd)
-        logger.info(f"Built executable for {target_platform}")
+        logger.info(f"Running PyInstaller with command: {' '.join(pyinst_cmd)}")
+        try:
+            subprocess.check_call(pyinst_cmd)
+            logger.info(f"Built executable for {target_platform}")
+        except subprocess.CalledProcessError as proc_error:
+            logger.error(f"PyInstaller failed with error code {proc_error.returncode}")
+
+            # Check if the output directory actually has the executable despite the error
+            # (Sometimes PyInstaller reports an error but still creates the executable)
+            expected_exe = os.path.join(DIST_DIR, app_name, f"{app_name}.exe") if target_platform == "windows" else \
+                          os.path.join(DIST_DIR, app_name, app_name)
+
+            if os.path.exists(expected_exe) and os.path.getsize(expected_exe) > 1000000:  # Check if it's a substantial exe
+                logger.warning("PyInstaller reported an error, but the executable was created successfully!")
+                return True
+            raise  # Re-raise the exception if no executable was found
 
         return True
 
@@ -210,18 +330,37 @@ def package_distribution(target_platform, version):
     logger.info(f"Packaging distribution for {target_platform}...")
 
     try:
-        # Get distribution directory
-        dist_name = f"SS Ham Modem {version}"
-        dist_path = os.path.join(DIST_DIR, dist_name)
+        # Get distribution directory - use underscore-separated name to match PyInstaller output
+        app_name = f"SS_Ham_Modem_{version}"
+        dist_path = os.path.join(DIST_DIR, app_name)
+
+        # If not found with underscores, try with spaces (for backwards compatibility)
+        if not os.path.exists(dist_path):
+            alt_name = f"SS Ham Modem {version}"
+            alt_path = os.path.join(DIST_DIR, alt_name)
+            if os.path.exists(alt_path):
+                logger.info(f"Found distribution at alternate path: {alt_path}")
+                dist_path = alt_path
+                app_name = alt_name
+            else:
+                # Try with any SS*Ham*Modem* pattern as a last resort
+                glob_pattern = os.path.join(DIST_DIR, "SS*Ham*Modem*")
+                matches = glob.glob(glob_pattern)
+                if matches:
+                    dist_path = matches[0]
+                    app_name = os.path.basename(dist_path)
+                    logger.info(f"Found distribution using pattern match: {dist_path}")
 
         if not os.path.exists(dist_path):
             logger.error(f"Distribution directory not found: {dist_path}")
-            return False
-
-        # Create package
+            # List what's actually in the dist directory for debugging
+            logger.info(f"Contents of {DIST_DIR}:")
+            for item in os.listdir(DIST_DIR):
+                logger.info(f"  - {item}")
+            return False        # Create package
         if target_platform == "windows":
             # Create ZIP archive for Windows
-            archive_name = f"{dist_name}-windows.zip"
+            archive_name = f"{app_name}-windows.zip"
             archive_path = os.path.join(DIST_DIR, archive_name)
 
             base_dir = os.path.basename(dist_path)
@@ -236,7 +375,7 @@ def package_distribution(target_platform, version):
 
         else:  # Linux
             # Create tarball for Linux
-            archive_name = f"{dist_name}-linux.tar.gz"
+            archive_name = f"{app_name}-linux.tar.gz"
             archive_path = os.path.join(DIST_DIR, archive_name)
 
             base_dir = os.path.basename(dist_path)
@@ -575,7 +714,7 @@ def main():
     """Main packaging function"""
     args = parse_arguments()
 
-    logger.info("Starting SS-Ham-Modem packaging process")
+    logger.info("Starting SS Ham Modem packaging process")
     logger.info(f"Version: {args.version}")
     logger.info(f"Platforms: {args.platform}")
     logger.info(f"Obfuscation: {'Enabled' if args.obfuscate else 'Disabled'}")

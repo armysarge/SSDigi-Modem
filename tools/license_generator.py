@@ -108,8 +108,8 @@ def generate_license_key(callsign, tier, salt):
 def create_license_file(callsign, tier, output_path=None):
     """Create a license file for the specified callsign and tier"""
     # Same salt as used in the main application
-    salt = b'SS-Ham-Modem-Salt-Value'
-    secret_key = derive_key("SS-Ham-Modem-Secret-Key", salt)
+    salt = b'SS-Ham-Modem-Salt-V'
+    secret_key = derive_key("SS-Ham-Modem-Secret-K", salt)
     cipher = Fernet(secret_key)
 
     # Generate the license key
