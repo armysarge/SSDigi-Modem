@@ -1,9 +1,5 @@
 """
-from PyQt5.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout,
-                            QLabel, QPushButton, QComboBox, QCheckBox,
-                            QSpinBox, QDoubleSpinBox, QLineEdit, QGroupBox,
-                            QFormLayout, QFileDialog, QDialogButtonBox,
-                            QMessageBox, QSlider, QWidget)ngs dialog for SS Ham Modem
+Settings dialog for SSDigi Modem
 """
 import logging
 import os
@@ -14,24 +10,28 @@ from PyQt5.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout,
                             QMessageBox, QSlider, QWidget)
 from PyQt5.QtCore import Qt, pyqtSlot
 from PyQt5.QtGui import QIcon
-from ss_ham_modem.utils.ui_helpers import get_app_icon
+from ssdigi_modem.utils.ui_helpers import get_app_icon
+from ssdigi_modem.core.audio_manager import AudioManager
+import serial.tools.list_ports
 
 logger = logging.getLogger(__name__)
+from ssdigi_modem.core.audio_manager import AudioManager
 
 class SettingsDialog(QDialog):
-    """Settings dialog for SS Ham Modem application"""
+    """Settings dialog for SSDigi Modem application"""
 
-    def __init__(self, config, license_manager, parent=None):
+    def __init__(self, config, parent=None):
         """Initialize settings dialog"""
         super().__init__(parent)
 
-        self.config = config
-        self.license_manager = license_manager
+        self.config = config        # Create UI
+        self.setWindowTitle("SSDigi Modem Settings")
+        self.setFixedSize(600, 400)  # Set fixed size
 
-        # Create UI
-        self.setWindowTitle("SS Ham Modem Settings")
-        self.setMinimumWidth(600)
-        self.setMinimumHeight(500)        # Set application icon
+        # Prevent window resizing
+        self.setWindowFlags(self.windowFlags() | Qt.MSWindowsFixedSizeDialogHint)
+
+        # Set application icon
         try:
             icon_path = get_app_icon()
             if icon_path:
@@ -44,12 +44,14 @@ class SettingsDialog(QDialog):
 
         # Create tab widget
         self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)        # Create settings tabs
+        main_layout.addWidget(self.tab_widget)
+
+        # Create settings tabs
         self._create_audio_tab()
+        self._create_modem_tab()
         self._create_station_tab()
         self._create_hamlib_tab()
         self._create_ui_tab()
-        # Network tab removed - settings now hardcoded
 
         # Create dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
@@ -131,8 +133,81 @@ class SettingsDialog(QDialog):
         # Add to tab widget
         self.tab_widget.addTab(audio_tab, "Audio")
 
-    def _create_station_tab(self):
+    def _create_modem_tab(self):
         """Create modem settings tab"""
+        modem_tab = QWidget()
+        layout = QVBoxLayout(modem_tab)
+
+        # Communication settings
+        comm_group = QGroupBox("Communication Settings")
+        comm_layout = QFormLayout()
+
+        # Mode selection
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("ARDOP", "ARDOP")
+        comm_layout.addRow("Mode:", self.mode_combo)
+
+        # Bandwidth selection
+        self.bandwidth_combo = QComboBox()
+        for bw in [200, 500, 1000, 2000]:
+            self.bandwidth_combo.addItem(f"{bw} Hz", bw)
+        comm_layout.addRow("Bandwidth:", self.bandwidth_combo)
+
+        # Center frequency
+        self.center_freq_spin = QSpinBox()
+        self.center_freq_spin.setRange(500, 3000)
+        self.center_freq_spin.setSingleStep(10)
+        self.center_freq_spin.setSuffix(" Hz")
+        comm_layout.addRow("Center Frequency:", self.center_freq_spin)
+
+        comm_group.setLayout(comm_layout)
+        layout.addWidget(comm_group)
+
+        # Spectrum and waterfall settings
+        spectrum_group = QGroupBox("Spectrum Display")
+        spectrum_layout = QFormLayout()
+
+        # FFT averaging settings
+        self.fft_avg_spin = QSpinBox()
+        self.fft_avg_spin.setRange(1, 10)
+        self.fft_avg_spin.setSingleStep(1)
+        self.fft_avg_spin.setToolTip("Number of FFT frames to average (higher values give smoother spectrum)")
+        spectrum_layout.addRow("FFT Averaging:", self.fft_avg_spin)
+
+        # Spectrum scaling
+        self.spectrum_ref_spin = QSpinBox()
+        self.spectrum_ref_spin.setRange(-120, 0)
+        self.spectrum_ref_spin.setSingleStep(5)
+        self.spectrum_ref_spin.setSuffix(" dB")
+        self.spectrum_ref_spin.setToolTip("Reference level for spectrum display")
+        spectrum_layout.addRow("Reference Level:", self.spectrum_ref_spin)
+
+        # Spectrum range
+        self.spectrum_range_spin = QSpinBox()
+        self.spectrum_range_spin.setRange(30, 120)
+        self.spectrum_range_spin.setSingleStep(5)
+        self.spectrum_range_spin.setSuffix(" dB")
+        self.spectrum_range_spin.setToolTip("Range of spectrum display")
+        spectrum_layout.addRow("Display Range:", self.spectrum_range_spin)
+
+        # Waterfall settings
+        self.waterfall_speed_combo = QComboBox()
+        self.waterfall_speed_combo.addItem("Slow", "slow")
+        self.waterfall_speed_combo.addItem("Medium", "medium")
+        self.waterfall_speed_combo.addItem("Fast", "fast")
+        spectrum_layout.addRow("Waterfall Speed:", self.waterfall_speed_combo)
+
+        spectrum_group.setLayout(spectrum_layout)
+        layout.addWidget(spectrum_group)
+
+        # Add stretch
+        layout.addStretch(1)
+
+        # Add to tab widget
+        self.tab_widget.addTab(modem_tab, "Modem")
+
+    def _create_station_tab(self):
+        """Create station settings tab"""
         station_tab = QWidget()
         layout = QVBoxLayout(station_tab)
         # ARDOP advanced settings
@@ -141,38 +216,36 @@ class SettingsDialog(QDialog):
         self.callsign_edit = QLineEdit()
         self.callsign_edit.setMaxLength(10)
         # Check if licensed callsign is present - if so, disable editing
-        licensed_callsign = self.license_manager.get_callsign()
-        if licensed_callsign:
-            self.callsign_edit.setText(licensed_callsign)
-            self.callsign_edit.setEnabled(False)
-            self.callsign_edit.setToolTip("Callsign is locked by your license")
+        self.callsign_edit.setText(self.config.get('user', 'callsign', '').upper())
+        self.callsign_edit.setToolTip("Callsign is locked by your license")
         advanced_layout.addRow("Callsign:", self.callsign_edit)
+
+        self.fullname_edit = QLineEdit()
+        self.fullname_edit.setMaxLength(50)
+        self.fullname_edit.setText(self.config.get('user', 'fullname', ''))
+        self.fullname_edit.setToolTip("Your full name")
+        advanced_layout.addRow("Full Name:", self.fullname_edit)
+
+        self.email_edit = QLineEdit()
+        self.email_edit.setMaxLength(100)
+        self.email_edit.setText(self.config.get('user', 'email', ''))
+        self.email_edit.setToolTip("Your email address")
+        advanced_layout.addRow("Email:", self.email_edit)
+
+        self.city_edit = QLineEdit()
+        self.city_edit.setMaxLength(50)
+        self.city_edit.setText(self.config.get('user', 'city', ''))
+        self.city_edit.setToolTip("Your city or location")
+        advanced_layout.addRow("City:", self.city_edit)
 
         self.grid_square_edit = QLineEdit()
         self.grid_square_edit.setMaxLength(6)
+        self.grid_square_edit.setText(self.config.get('user', 'grid_square', ''))
+        self.grid_square_edit.setToolTip("Grid square is the location of your station")
         advanced_layout.addRow("Grid Square:", self.grid_square_edit)
 
         advanced_group.setLayout(advanced_layout)
         layout.addWidget(advanced_group)
-
-        # License status
-        license_group = QGroupBox("License Status")
-        license_layout = QFormLayout()
-
-        license_info = self.license_manager.get_license_info()
-        tier = license_info['tier'].capitalize()
-
-        self.license_status_label = QLabel(f"Current tier: {tier}")
-        max_bw = license_info['features']['max_bandwidth']
-        max_speed = license_info['features']['max_speed']
-
-        self.license_limits_label = QLabel(f"Max bandwidth: {max_bw} Hz, Max speed: {max_speed} bps")
-
-        license_layout.addRow("Status:", self.license_status_label)
-        license_layout.addRow("Limits:", self.license_limits_label)
-
-        license_group.setLayout(license_layout)
-        layout.addWidget(license_group)
 
         # Add stretch
         layout.addStretch(1)
@@ -304,31 +377,80 @@ class SettingsDialog(QDialog):
     def _refresh_audio_devices(self):
         """Refresh available audio devices"""
         try:
-            # This would normally use AudioManager to list devices
-            # For now, we'll just populate some dummy values
+            # Store current selections
+            current_input = self.input_combo.currentData()
+            current_output = self.output_combo.currentData()
 
             # Clear existing items
             self.input_combo.clear()
             self.output_combo.clear()
 
-            # Add dummy items
-            self.input_combo.addItem("Default Input Device", None)
-            self.input_combo.addItem("Microphone", 1)
-            self.input_combo.addItem("Line In", 2)
+            # Create temporary AudioManager
+            audio_mgr = AudioManager(self.config)
 
-            self.output_combo.addItem("Default Output Device", None)
-            self.output_combo.addItem("Speakers", 1)
-            self.output_combo.addItem("Headphones", 2)
+            try:                # Add "System Default" option with special index
+                self.input_combo.addItem("System Default", -1)
+                self.output_combo.addItem("System Default", -1)
+
+                # Track added device names to prevent duplicates
+                added_input_names = set()
+                added_output_names = set()
+
+                # Filter and add physical input devices
+                input_devices = audio_mgr.get_input_devices()
+                # Sort devices by name for consistent order
+                input_devices.sort(key=lambda x: x[0])
+
+                for name, idx in input_devices:
+                    # Skip devices with duplicate names or virtual devices
+                    if name in added_input_names or "Virtual" in name:
+                        continue
+                    # Add the device
+                    self.input_combo.addItem(name, idx)
+                    added_input_names.add(name)
+
+                # Filter and add physical output devices
+                output_devices = audio_mgr.get_output_devices()
+                # Sort devices by name for consistent order
+                output_devices.sort(key=lambda x: x[0])
+
+                for name, idx in output_devices:
+                    # Skip devices with duplicate names or virtual devices
+                    if name in added_output_names or "Virtual" in name:
+                        continue
+                    # Add the device
+                    self.output_combo.addItem(name, idx)
+                    added_output_names.add(name)
+
+                # Try to restore previous selection, fall back to config, then to default
+                input_idx = self.input_combo.findData(current_input)
+                if input_idx < 0:
+                    input_idx = self.input_combo.findData(self.config.get('audio', 'input_device'))
+                if input_idx < 0:
+                    input_idx = 0
+                self.input_combo.setCurrentIndex(input_idx)
+
+                output_idx = self.output_combo.findData(current_output)
+                if output_idx < 0:
+                    output_idx = self.output_combo.findData(self.config.get('audio', 'output_device'))
+                if output_idx < 0:
+                    output_idx = 0
+                self.output_combo.setCurrentIndex(output_idx)
+
+            finally:
+                # Always clean up the audio manager
+                audio_mgr.close()
+
+            logger.info("Audio devices refreshed successfully")
+
         except Exception as e:
-            logger.exception(f"Error refreshing audio devices: {e}")
+            logger.exception("Error refreshing audio devices")
             QMessageBox.warning(self, "Error",
                               f"Failed to refresh audio devices: {str(e)}")
 
     def _scan_serial_ports(self):
         """Scan for available serial ports"""
         try:
-            import serial.tools.list_ports
-
             # Get list of ports
             ports = list(serial.tools.list_ports.comports())
 
@@ -366,8 +488,27 @@ class SettingsDialog(QDialog):
             tx_level = int(self.config.get('modem', 'tx_level') * 100)
             self.tx_level_slider.setValue(tx_level)
 
-            # Modem settings (squelch control has been removed from UI)
-            # Mode, bandwidth and center frequency are now fixed
+            # Load modem settings
+            # Set mode
+            mode_index = self.mode_combo.findData(self.config.get('modem', 'mode'))
+            self.mode_combo.setCurrentIndex(max(0, mode_index))
+
+            # Set bandwidth
+            bw_index = self.bandwidth_combo.findData(self.config.get('modem', 'bandwidth'))
+            self.bandwidth_combo.setCurrentIndex(max(0, bw_index))
+
+            # Set center frequency
+            self.center_freq_spin.setValue(self.config.get('modem', 'center_freq'))
+
+            # Set spectrum settings
+            self.fft_avg_spin.setValue(self.config.get('ui', 'fft_average_frames', 2))
+            self.spectrum_ref_spin.setValue(self.config.get('ui', 'spectrum_ref_level', -60))
+            self.spectrum_range_spin.setValue(self.config.get('ui', 'spectrum_range', 70))
+
+            # Set waterfall settings
+            waterfall_speed = self.config.get('ui', 'waterfall_speed', 'medium')
+            waterfall_speed_index = self.waterfall_speed_combo.findData(waterfall_speed)
+            self.waterfall_speed_combo.setCurrentIndex(max(0, waterfall_speed_index))
 
             # Load HAMLIB settings
             self.hamlib_enabled_check.setChecked(self.config.get('hamlib', 'enabled'))
@@ -409,14 +550,28 @@ class SettingsDialog(QDialog):
 
     def _apply_settings(self):
         """Apply current dialog settings to config"""
-        try:
-            # Apply audio settings
+        try:            # Apply audio settings
             self.config.set('audio', 'sample_rate', self.sample_rate_combo.currentData())
             self.config.set('audio', 'channels', self.channels_combo.currentData())
             self.config.set('audio', 'buffer_size', self.buffer_spin.value())
 
+            # Save audio device selections
+            self.config.set('audio', 'input_device', self.input_combo.currentData())
+            self.config.set('audio', 'output_device', self.output_combo.currentData())
+
             tx_level = self.tx_level_slider.value() / 100.0
             self.config.set('modem', 'tx_level', tx_level)
+
+            # Apply modem settings
+            self.config.set('modem', 'mode', self.mode_combo.currentData())
+            self.config.set('modem', 'bandwidth', self.bandwidth_combo.currentData())
+            self.config.set('modem', 'center_freq', self.center_freq_spin.value())
+
+            # Apply spectrum settings
+            self.config.set('ui', 'fft_average_frames', self.fft_avg_spin.value())
+            self.config.set('ui', 'spectrum_ref_level', self.spectrum_ref_spin.value())
+            self.config.set('ui', 'spectrum_range', self.spectrum_range_spin.value())
+            self.config.set('ui', 'waterfall_speed', self.waterfall_speed_combo.currentData())
 
             # Apply HAMLIB settings
             self.config.set('hamlib', 'enabled', self.hamlib_enabled_check.isChecked())
@@ -428,40 +583,30 @@ class SettingsDialog(QDialog):
             # Apply UI settings
             self.config.set('ui', 'theme', self.theme_combo.currentData())
             self.config.set('ui', 'waterfall_colors', self.waterfall_combo.currentData())
-            # FFT size is now fixed at 2048
-            self.config.set('ui', 'fft_size', 2048)
+            self.config.set('ui', 'fft_size', 2048)  # Fixed at 2048
             self.config.set('ui', 'spectrum_update_rate', self.update_rate_spin.value())
 
             # Apply display settings
             self.config.set('ui', 'show_freq_markers', self.show_freq_check.isChecked())
             self.config.set('ui', 'show_grid', self.show_grid_check.isChecked())
             self.config.set('ui', 'fft_average', self.average_check.isChecked())
-            self.config.set('ui', 'peak_hold', self.peak_hold_check.isChecked())
 
-            # Handle callsign - check if there's a licensed callsign first
-            licensed_callsign = self.license_manager.get_callsign()
-            if licensed_callsign:
-                # Always use the licensed callsign, ignore any user edits
-                self.config.set('user', 'callsign', licensed_callsign)
-                logger.info(f"Using licensed callsign: {licensed_callsign} (user edits ignored)")
-            else:
-                # No license callsign, use the user-provided value
-                self.config.set('user', 'callsign', self.callsign_edit.text())
-                logger.info(f"Using user-provided callsign: {self.callsign_edit.text()}")
+            # Apply user settings
+            self.config.set('user', 'callsign', self.callsign_edit.text().upper())
+
+            # Save new user fields
+            self.config.set('user', 'fullname', self.fullname_edit.text())
+            self.config.set('user', 'email', self.email_edit.text())
+            self.config.set('user', 'city', self.city_edit.text())
+            self.config.set('user', 'grid_square', self.grid_square_edit.text())
 
             # Save config
             self.config.save()
-
-            QMessageBox.information(self, "Settings", "Settings applied successfully.")
-
-            # Signal that settings have changed
-            if self.parent() and hasattr(self.parent(), 'update_from_config'):
-                self.parent().update_from_config()
-
+            return True
         except Exception as e:
             logger.exception(f"Error applying settings: {e}")
-            QMessageBox.warning(self, "Error",
-                              f"Failed to apply settings: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to apply settings: {e}")
+            return False
 
     @pyqtSlot()
     def accept(self):

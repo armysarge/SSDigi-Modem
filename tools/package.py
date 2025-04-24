@@ -1,5 +1,5 @@
 """
-Packaging script for SS Ham Modem
+Packaging script for SSDigi Modem
 This script creates distributable packages for Windows and Linux platforms
 """
 import os
@@ -32,7 +32,7 @@ VERSION = "0.1.0"
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="Package SS Ham Modem for distribution")
+    parser = argparse.ArgumentParser(description="Package SSDigi Modem for distribution")
     parser.add_argument("--platform", choices=["windows", "linux", "all"], default="all",
                         help="Platform to build for (windows, linux, or all)")
     parser.add_argument("--obfuscate", action="store_true", help="Obfuscate Python code")
@@ -53,14 +53,14 @@ def clean_directories():
             try:
                 subprocess.run(
                     ["powershell", "-Command",
-                     "Get-Process -Name 'SS_Ham_Modem*','SS Ham Modem*' -ErrorAction SilentlyContinue | Stop-Process -Force"],
+                     "Get-Process -Name 'SSDigi Modem*','SSDigi Modem*' -ErrorAction SilentlyContinue | Stop-Process -Force"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
             except:
                 # Fall back to taskkill as a backup
                 subprocess.run(
-                    ["taskkill", "/F", "/IM", "SS Ham Modem*.exe"],
+                    ["taskkill", "/F", "/IM", "SSDigi Modem*.exe"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
@@ -204,8 +204,8 @@ def copy_unobfuscated_code():
     logger.info("Copying Python code (unobfuscated)...")
 
     try:
-        src_dir = os.path.join(BASE_DIR, "ss_ham_modem")
-        dst_dir = os.path.join(TEMP_DIR, "ss_ham_modem")
+        src_dir = os.path.join(BASE_DIR, "ssdigi_modem")
+        dst_dir = os.path.join(TEMP_DIR, "ssdigi_modem")
 
         if os.path.exists(dst_dir):
             shutil.rmtree(dst_dir)
@@ -226,10 +226,10 @@ def build_with_pyinstaller(target_platform):
     try:
         # Determine platform-specific settings
         if target_platform == "windows":
-            icon_path = os.path.join(BASE_DIR, "resources", "icons", "ss_ham_modem.ico")
+            icon_path = os.path.join(BASE_DIR, "resources", "icons", "ssdigi_modem.ico")
             separator = ";"
         else:  # Linux
-            icon_path = os.path.join(BASE_DIR, "resources", "icons", "ss_ham_modem.png")
+            icon_path = os.path.join(BASE_DIR, "resources", "icons", "ssdigi_modem.png")
             separator = ":"
 
         # Check if icon exists and is valid
@@ -241,13 +241,13 @@ def build_with_pyinstaller(target_platform):
             logger.warning(f"Icon not found or empty: {icon_path} - continuing without an icon")
 
         # Create PyInstaller spec file
-        spec_file = os.path.join(TEMP_DIR, "ss_ham_modem.spec")
+        spec_file = os.path.join(TEMP_DIR, "ssdigi_modem.spec")
 
         # Define paths for PyInstaller
-        src_dir = os.path.join(TEMP_DIR, "ss_ham_modem")
+        src_dir = os.path.join(TEMP_DIR, "ssdigi_modem")
 
         # Create PyInstaller command - use underscore instead of spaces to avoid issues
-        app_name = f"SS_Ham_Modem_{VERSION}"
+        app_name = f"SSDigi_Modem_{VERSION}"
 
         if platform.system() == "Windows":
             # If we're on Windows, try to disable Windows Defender's real-time monitoring temporarily
@@ -285,8 +285,8 @@ def build_with_pyinstaller(target_platform):
         pyinst_cmd.extend(icon_option)
         # Add remaining options
         pyinst_cmd.extend([
-            # Include only the ss_ham_modem/bin folder which contains just the ardop.exe file
-            "--add-data", f"{os.path.join(BASE_DIR, 'ss_ham_modem', 'bin')}{separator}bin",
+            # Include only the ssdigi_modem/bin folder which contains just the ardop.exe file
+            "--add-data", f"{os.path.join(BASE_DIR, 'ssdigi_modem', 'bin')}{separator}bin",
             "--distpath", DIST_DIR,
             "--workpath", BUILD_DIR,
             # Add hidden imports for PyQt5
@@ -330,22 +330,21 @@ def package_distribution(target_platform, version):
     """Package the distribution for the target platform"""
     logger.info(f"Packaging distribution for {target_platform}...")
 
-    try:
-        # Get distribution directory - use underscore-separated name to match PyInstaller output
-        app_name = f"SS_Ham_Modem_{version}"
+    try:        # Get distribution directory - use underscore-separated name to match PyInstaller output
+        app_name = f"SSDigi_Modem_{version}"
         dist_path = os.path.join(DIST_DIR, app_name)
 
         # If not found with underscores, try with spaces (for backwards compatibility)
         if not os.path.exists(dist_path):
-            alt_name = f"SS Ham Modem {version}"
+            alt_name = f"SSDigi Modem {version}"
             alt_path = os.path.join(DIST_DIR, alt_name)
             if os.path.exists(alt_path):
                 logger.info(f"Found distribution at alternate path: {alt_path}")
                 dist_path = alt_path
                 app_name = alt_name
             else:
-                # Try with any SS*Ham*Modem* pattern as a last resort
-                glob_pattern = os.path.join(DIST_DIR, "SS*Ham*Modem*")
+                # Try with any SSDigi*Modem* pattern as a last resort
+                glob_pattern = os.path.join(DIST_DIR, "SSDigi*Modem*")
                 matches = glob.glob(glob_pattern)
                 if matches:
                     dist_path = matches[0]
@@ -714,8 +713,7 @@ def build_ardop_linux():
 def main():
     """Main packaging function"""
     args = parse_arguments()
-
-    logger.info("Starting SS Ham Modem packaging process")
+    logger.info("Starting SSDigi Modem packaging process")
     logger.info(f"Version: {args.version}")
     logger.info(f"Platforms: {args.platform}")
     logger.info(f"Obfuscation: {'Enabled' if args.obfuscate else 'Disabled'}")

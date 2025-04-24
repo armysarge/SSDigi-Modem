@@ -1,153 +1,146 @@
-# SS-Ham-Modem
+[![madewithlove](https://img.shields.io/badge/made_with-%E2%9D%A4-red?style=for-the-badge&labelColor=orange)](https://github.com/armysarge/ssdigi-modem)
 
-![SS-Ham-Modem Logo](images/ss-ham-modem-logo.png)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-brightgreen?logo=buymeacoffee)](https://www.buymeacoffee.com/armysarge)
 
-## Overview
+[![Python 3.6+](https://img.shields.io/badge/python-3.6%2B-blue.svg)](https://www.python.org/downloads/release/python-360/)
+[![PyQt5](https://img.shields.io/badge/PyQt5-5.15.4-blue.svg)](https://pypi.org/project/PyQt5/)
+[![NumPy](https://img.shields.io/badge/NumPy-1.19.2-blue.svg)](https://numpy.org/install/)
+[![SoundDevice](https://img.shields.io/badge/SoundDevice-0.4.1-blue.svg)](https://pypi.org/project/sounddevice/)
 
-SS-Ham-Modem is a comprehensive digital modem application for amateur radio operators. It provides a modern interface for ARDOP (Amateur Radio Digital Open Protocol) communication with features similar to VARA but in an open-source implementation. The application includes spectrum analysis, waterfall display, rig control via Hamlib, and a flexible configuration system.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![GitHub issues](https://img.shields.io/github/issues/armysarge/ssdigi-modem)](https://github.com/armysarge/ssdigi-modem/issues)
+
+<div align="center">
+
+# SSDigi Modem
+
+ SSDigi Modem is a software modem for amateur radio digital communications. It provides a flexible platform for transmitting and receiving digital data over radio frequencies with various modulation schemes. Supports Windows, Linux, and MacOS.
 
 ## Features
 
-- **Digital Modes**: Implements ARDOP protocol for reliable digital communication
-- **Spectrum Display**: Real-time FFT spectrum analyzer showing frequency domain data
-- **Waterfall Display**: Time-frequency visualization with multiple color schemes
-- **Rig Control**: Full HAMLIB integration for controlling amateur radio equipment
-- **Audio Processing**: Configurable audio device selection, recording, and playback
-- **License System**: Different feature tiers with varying capabilities (Free, Basic, Pro)
-- **Cross Platform**: Runs on both Windows and Linux systems
-
-## Screenshots
-
-![Main Interface](images/screenshot-main.png)
-![Waterfall Display](images/screenshot-waterfall.png)
-![Settings](images/screenshot-settings.png)
-
-## Requirements
-
-- Python 3.7 or higher
-- PyQt5
-- HAMLIB (for rig control)
-- ARDOP binaries
+- **Spectrum Analyzer**: Real-time visualization of frequency spectrum with configurable display range
+- **Waterfall Display**: Time-based visualization of signal strength across frequencies
+- **Configurable Bandwidth**: Adjustable signal bandwidth with visual indicators
+- **Frequency Selection**: Interactive frequency selection directly from the spectrum display
+- **Audio Processing**: Direct interface with sound card input/output for signal processing
 
 ## Installation
 
-### From Source
+### Requirements
+- Python 3.6+
+- PyQt5
+- NumPy
+- SoundDevice (for audio I/O)
 
-1. Clone this repository:
-   ```powershell
-   git clone https://github.com/yourusername/SS-Ham-Modem.git
-   cd SS-Ham-Modem
+### Setup
+1. Clone the repository:
+   ```
+   git clone https://github.com/armysarge/SSDigi-Modem.git
+   cd SSDigi-Modem
    ```
 
-2. Create a virtual environment (recommended):
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
+2. Install dependencies:
    ```
-
-3. Install dependencies:
-   ```powershell
    pip install -r requirements.txt
    ```
 
-4. Run the application:
-   ```powershell
-   python run_modem.py
-   ```
+## Running and Packaging
 
-### Pre-built Packages
+### Running the Application
 
-Pre-built packages are available for Windows and Linux. Download from the [releases page](https://github.com/yourusername/SS-Ham-Modem/releases).
+After installing dependencies (see Installation), you can run the app with:
+
+```pwsh
+python rn-modem.py
+```
+
+or, if your main entry point is `run_modem.py`:
+
+```pwsh
+python run_modem.py
+```
+
+### Packaging for Windows and Linux
+
+This project includes a packaging script at `tools/package.py` that automates building and packaging for both Windows and Linux.
+
+#### 1. Install Requirements
+
+Make sure you have all dependencies installed:
+```pwsh
+pip install -r requirements.txt
+```
+You may also need PyInstaller and other build tools:
+```pwsh
+pip install pyinstaller
+```
+
+#### 2. Run the Packaging Script
+
+From the project root, run:
+```pwsh
+python tools/package.py --platform windows
+```
+or for Linux:
+```pwsh
+python tools/package.py --platform linux
+```
+or to build for both:
+```pwsh
+python tools/package.py --platform all
+```
+
+You can see all available options with:
+```pwsh
+python tools/package.py --help
+```
+
+#### 3. Output
+
+- The packaged executables and archives will be placed in the `dist/` directory.
+- For Windows, you’ll get a `.zip` file; for Linux, a `.tar.gz` archive.
+
+#### 4. Notes
+
+- The script will attempt to build native ARDOP binaries for each platform.
+- If you want to skip building binaries, use `--no-binaries`.
+- For advanced options (obfuscation, build-only, etc.), see the help output.
 
 ## Usage
 
-### Basic Operation
+The main interface displays both spectrum and waterfall views of the received signal. The spectrum view shows signal strength across frequencies at the current moment, while the waterfall displays signal history over time.
 
-1. Launch the application
-2. Select your audio input and output devices in the Settings dialog
-3. Configure your radio via HAMLIB (if applicable)
-4. Use the spectrum and waterfall displays to monitor signals
-5. Connect to digital mode applications for message exchange
+- **Adjust Bandwidth**: Change the bandwidth settings in the configuration panel
+- **Select Frequency**: Click on the spectrum display to select a specific frequency
+- **Adjust Display Range**: Configure the spectrum display multiplier to see more context beyond the operating bandwidth
 
-### Configuration
+## Configuration
 
-The application can be configured via the Settings dialog:
+The software uses a configuration system with these key parameters:
 
-- **Audio**: Select audio devices, sample rate, and buffer size
-- **Modem**: Configure ARDOP parameters like bandwidth and center frequency
-- **HAMLIB**: Set up rig control for your specific radio model
-- **Display**: Customize the user interface appearance
-- **Network**: Configure interfaces to host applications
+- **Audio Settings**:
+  - `sample_rate`: Audio sampling rate (default: 48000 Hz)
+  - `input_device`: Audio input device selection
+  - `output_device`: Audio output device selection
 
-## License System
+- **Modem Settings**:
+  - `center_freq`: Center frequency for the modem operation
+  - `bandwidth`: Operating bandwidth in Hz
 
-SS-Ham-Modem offers different feature tiers:
+- **UI Settings**:
+  - `fft_size`: Size of the FFT for spectrum analysis
+  - `spectrum_ref_level`: Reference level for spectrum display in dB
+  - `spectrum_range`: Range of the spectrum display in dB
+  - `freq_display_multiplier`: Multiplier for frequency display range (2.0 = show twice the bandwidth)
 
-- **Free**: Basic functionality with limited bandwidth (500 Hz)
-- **Basic**: Increased bandwidth (2000 Hz) and speed
-- **Pro**: Maximum bandwidth (5000 Hz), speed, and advanced features
+## Development
 
-Licenses are tied to your amateur radio callsign. Contact the project maintainer to purchase a license.
-
-## Building from Source
-
-### Prerequisites
-
-- Python 3.7+
-- Qt development tools (for PyQt5)
-- C++ compiler (for HAMLIB and ARDOP)
-
-### Build Steps
-
-1. Install development dependencies:
-   ```powershell
-   pip install -r requirements-dev.txt
-   ```
-
-2. Package the application:
-   ```powershell
-   python tools/package.py --platform all
-   ```
-
-### Create license key file
-
-```
-python tools/license_generator.py --callsign W1ABC --tier pro --out W1ABC_license.dat
-```
-
-## Build package
-
-```
-python tools/package.py [options]
-
-Options:
-  --platform {windows,linux,all}  Platform to build for
-  --obfuscate                     Obfuscate Python code for protection
-  --no-binaries                   Skip bundling binaries
-  --build-only                    Build without packaging
-  --version VERSION               Version number for the package
-```
-
-```
-python tools/package.py --platform windows --obfuscate
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the [GNU General Public License v3.0](LICENSE) - see the LICENSE file for details.
+This project is under active development. Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ## Acknowledgments
 
-- Thanks to [ARDOP](https://ardop.org) for the digital protocol implementation
-- [HAMLIB](https://hamlib.github.io) for the amateur radio control library
-- The amateur radio community for continued testing and feedback
+Ardobcf is a derivative of the original ARDOP project, which is a software modem for amateur radio digital communications. The SSDigi Modem builds upon the concepts and codebase of ARDOP to provide a more flexible and user-friendly experience.
+
+## License
+
+This software is distributed under the MIT License. See the LICENSE file for more information.

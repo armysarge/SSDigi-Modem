@@ -1,5 +1,5 @@
 """
-Modem management for SS Ham Modem
+Modem management for SSDigi Modem
 """
 import os
 import sys
@@ -16,28 +16,26 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 class ModemManager:
-    """ARDOP modem management for SS Ham Modem"""
-
-    def __init__(self, config, license_manager, hamlib_manager=None):
+    """ARDOP modem management for SSDigi Modem"""
+    def __init__(self, config, hamlib_manager=None):
         """Initialize modem manager"""
         self.config = config
-        self.license_manager = license_manager
         self.hamlib_manager = hamlib_manager
         self.connected = False
         self.ardop_process = None
-        self.fft_data = np.zeros(config.get('ui', 'fft_size') // 2)        # Communication settings
+        self.fft_data = np.zeros(config.get('ui', 'fft_size') // 2)
+
+        # Communication settings
         self.mode = config.get('modem', 'mode')
         self.bandwidth = int(config.get('modem', 'bandwidth'))
         self.center_freq = config.get('modem', 'center_freq')
 
-        # Get callsign - prioritize license callsign if available
-        licensed_callsign = license_manager.get_callsign()
-        if licensed_callsign:
-            self.callsign = licensed_callsign
-            logger.info(f"Using licensed callsign: {self.callsign}")
-        else:
-            self.callsign = config.get('user', 'callsign', '')
-            logger.info(f"Using configured callsign: {self.callsign}")
+        # Get callsign from configuration
+        self.callsign = config.get('user', 'callsign', '')
+        self.grid_square = config.get('user', 'grid_square', '')
+        self.fullname = config.get('user', 'fullname', '')
+        self.email = config.get('user', 'email', '')
+        self.city = config.get('user', 'city', '')
 
         # Status information
         self.status = {
@@ -144,13 +142,10 @@ class ModemManager:
             return False
 
         try:
-            # Check license restrictions
-            feature_limits = self.license_manager.get_feature_limits()
-            if self.bandwidth > feature_limits['max_bandwidth']:
-                logger.warning(f"Bandwidth {self.bandwidth} exceeds license limit {feature_limits['max_bandwidth']}")
-                self.bandwidth = feature_limits['max_bandwidth']
-                self.config.set('modem', 'bandwidth', self.bandwidth)
-                self.config.save()# Check if we have a valid ARDOP binary
+
+            logger.debug(f"Using bandwidth: {self.bandwidth} Hz")
+
+            # Check if we have a valid ARDOP binary
             if not self.ardop_path or not os.path.exists(self.ardop_path):
                 logger.warning(f"ARDOP binary not found, falling back to simulation mode")
                 self._start_simulation()
@@ -209,11 +204,7 @@ class ModemManager:
 
     def set_bandwidth(self, bandwidth):
         """Set modem bandwidth"""
-        # Check license restrictions
-        feature_limits = self.license_manager.get_feature_limits()
-        if bandwidth > feature_limits['max_bandwidth']:
-            logger.warning(f"Bandwidth {bandwidth} exceeds license limit {feature_limits['max_bandwidth']}")
-            return False
+        logger.debug(f"Setting bandwidth to {bandwidth} Hz")
 
         # Update configuration
         self.bandwidth = bandwidth
@@ -244,16 +235,9 @@ class ModemManager:
         return True
 
     def get_available_bandwidths(self):
-        """Get list of available bandwidths"""
-        # Get bandwidths from license limits
-        feature_limits = self.license_manager.get_feature_limits()
-        max_bw = feature_limits['max_bandwidth']
-
+        """Get list of available bandwidths - all are available now"""
         # Standard ARDOP bandwidths
-        bandwidths = [200, 500, 1000, 2000]
-
-        # Filter by license restrictions
-        return [bw for bw in bandwidths if bw <= max_bw]
+        return [200, 500, 1000, 2000]  # All bandwidths available to everyone
 
     def get_fft_data(self):
         """Get current FFT data for spectrum display"""
@@ -270,22 +254,13 @@ class ModemManager:
             # Get path to the pre-built ARDOP binary
             if not self.ardop_path or not os.path.exists(self.ardop_path):
                 logger.error(f"ARDOP binary not found at {self.ardop_path}")
-                return False
+                return False            # Get callsign from configuration
+            callsign = self.config.get('user', 'callsign', 'NOCALL')
 
-            # Get callsign - use licensed callsign if available, otherwise use the one from config
-            licensed_callsign = self.license_manager.get_callsign()
-
-            if licensed_callsign:
-                # Licensed user - must use the callsign from license
-                callsign = licensed_callsign
-                logger.info(f"Using licensed callsign: {callsign}")
-            else:
-                # Free version - can use any callsign (up to 8 chars)
-                callsign = self.config.get('modem', 'callsign', 'NOCALL')
-                # Validate callsign format
-                if not (len(callsign) <= 8 and callsign.isalnum()):
-                    logger.warning(f"Invalid callsign format: {callsign}, using NOCALL")
-                    callsign = "NOCALL"
+            # Validate callsign format
+            if not (len(callsign) <= 8 and callsign.isalnum()):
+                logger.warning(f"Invalid callsign format: {callsign}, using NOCALL")
+                callsign = "NOCALL"
 
             # Store the active callsign
             self.callsign = callsign.upper()
@@ -300,7 +275,7 @@ class ModemManager:
                 "-k", grid_square,        # Grid square
                 "--hostcommands",         # TCP host interface for commands
                 # Using hostcommands to set optimal parameters as shown in the documentation
-                f"\"MYCALL {self.callsign};DRIVELEVEL 90;ARQBW {self.bandwidth}MAX;FECMODE 4FSK.500.100S;LEADER 160;TRAILER 40;PROTOCOLMODE ARQ;BUSYDET 5;CONSOLELOG 6;LOGLEVEL 6;\"",
+                f"MYCALL {self.callsign};DRIVELEVEL 90;ARQBW {self.bandwidth}MAX;FECMODE 4FSK.500.100S;LEADER 160;TRAILER 40;PROTOCOLMODE ARQ;BUSYDET 5;CONSOLELOG 6;LOGLEVEL 6;",
             ]
 
             # Start ARDOP process
@@ -742,25 +717,17 @@ class ModemManager:
     def update_from_config(self):
         """Update modem settings from the configuration
 
-        This should be called when configuration changes, especially
-        for settings like callsign that may be enforced by license.
+        This should be called when configuration changes
         """
         # Update bandwidth and center frequency from config
         self.bandwidth = int(self.config.get('modem', 'bandwidth'))
         self.center_freq = self.config.get('modem', 'center_freq')
 
-        # Update callsign - always prioritize license callsign if available
-        licensed_callsign = self.license_manager.get_callsign()
-        if licensed_callsign:
-            if self.callsign != licensed_callsign:
-                logger.info(f"ModemManager: Updating callsign from license: {licensed_callsign}")
-                self.callsign = licensed_callsign
-        else:
-            # Use callsign from config if no license callsign available
-            config_callsign = self.config.get('user', 'callsign', '')
-            if self.callsign != config_callsign:
-                logger.info(f"ModemManager: Updating callsign from config: {config_callsign}")
-                self.callsign = config_callsign
+        # Use callsign from config
+        config_callsign = self.config.get('user', 'callsign', '')
+        if self.callsign != config_callsign:
+            logger.info(f"ModemManager: Updating callsign from config: {config_callsign}")
+            self.callsign = config_callsign
 
         # Update status information
         self.status.update({
@@ -773,3 +740,55 @@ class ModemManager:
             logger.info("ModemManager: Applying configuration changes to active connection")
             # Implementation depends on your modem interface
             # This might involve sending commands to update settings
+
+    def apply_config(self):
+        """Apply all settings from config"""
+        logger.info("Applying configuration changes to modem")
+
+        # Update bandwidth and center frequency from config
+        self.bandwidth = int(self.config.get('modem', 'bandwidth'))
+        self.center_freq = self.config.get('modem', 'center_freq')
+        self.mode = self.config.get('modem', 'mode', 'ARDOP')
+
+        # Update user info
+        self.callsign = self.config.get('user', 'callsign', '')
+        self.grid_square = self.config.get('user', 'grid_square', '')
+        self.fullname = self.config.get('user', 'fullname', '')
+        self.email = self.config.get('user', 'email', '')
+        self.city = self.config.get('user', 'city', '')
+
+        # Update status information
+        self.status.update({
+            'mode': self.mode,
+            'bandwidth': self.bandwidth,
+            'center_freq': self.center_freq
+        })
+
+        # If connected, apply changes immediately
+        if self.connected:
+            logger.info("ModemManager: Applying configuration changes to active connection")
+            # Send updated settings to modem
+            self._update_modem_settings()
+
+        return True
+
+    def _update_modem_settings(self):
+        """Update modem with current settings"""
+        # This is called when settings change while the modem is running
+        # Implementation depends on the modem interface
+        try:
+            # Example of sending commands to modem
+            if hasattr(self, 'ardop_socket') and self.ardop_socket:
+                # For example, send setting commands to ARDOP
+                logger.debug(f"Sending settings update to modem: BW={self.bandwidth}, CF={self.center_freq}")
+                # self._send_command(f"BANDWIDTH {self.bandwidth}")
+                # self._send_command(f"CENTER {self.center_freq}")
+
+            # In simulation mode, just update status
+            if self.simulation_mode:
+                logger.debug("Simulation mode: Updated settings")
+
+            return True
+        except Exception as e:
+            logger.exception(f"Error updating modem settings: {e}")
+            return False

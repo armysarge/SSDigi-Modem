@@ -7,4 +7,3 @@ matplotlib
 pyhamtools
 pyinstaller
 cryptography
-shuti

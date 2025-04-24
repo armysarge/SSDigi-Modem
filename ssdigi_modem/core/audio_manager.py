@@ -1,5 +1,5 @@
 """
-Audio management for SS Ham Modem
+Audio management for SSDigi Modem
 """
 import pyaudio
 import numpy as np
@@ -8,16 +8,21 @@ import threading
 import time
 from collections import deque
 import wave
+import sys
 
 logger = logging.getLogger(__name__)
 
 class AudioManager:
-    """Audio device management for SS Ham Modem"""
+    """Audio device management for SSDigi Modem"""
 
     def __init__(self, config):
         """Initialize audio manager"""
         self.config = config
         self.audio = pyaudio.PyAudio()
+
+        #if linux vhoose ALSA
+        self.linux = sys.platform.startswith('linux')
+
         self.input_stream = None
         self.output_stream = None
         self.input_device = None
@@ -43,24 +48,140 @@ class AudioManager:
     def get_input_devices(self):
         """Get list of available input devices"""
         devices = []
+        seen_names = set()
 
-        for i in range(self.audio.get_device_count()):
-            device_info = self.audio.get_device_info_by_index(i)
-            if device_info['maxInputChannels'] > 0:
-                name = device_info['name']
-                devices.append((name, i))
+        # Add only one system default at index -1 (will be 0 when no specific device is selected)
+        devices.append(("System Default", -1))
+
+        # Get available host APIs
+        host_api_count = self.audio.get_host_api_count()
+        host_api_index = 0  # Default to first host API
+
+        # Choose appropriate host API based on OS
+        if self.linux:
+            # Try to find ALSA host API
+            for i in range(host_api_count):
+                api_info = self.audio.get_host_api_info_by_index(i)
+                if api_info['name'].lower().find('alsa') >= 0:
+                    host_api_index = i
+                    break
+        else:
+            # For Windows, try to use WASAPI or DirectSound
+            for i in range(host_api_count):
+                api_info = self.audio.get_host_api_info_by_index(i)
+                if api_info['name'].lower().find('wasapi') >= 0 or api_info['name'].lower().find('directsound') >= 0:
+                    host_api_index = i
+                    break
+
+        logger.info(f"Using host API index {host_api_index}: {self.audio.get_host_api_info_by_index(host_api_index)['name']}")
+
+        # Get devices for the selected host API
+        try:
+            api_info = self.audio.get_host_api_info_by_index(host_api_index)
+            device_count = api_info['deviceCount']
+
+            # Track microphone names to avoid duplicates
+            for i in range(device_count):
+                try:
+                    # Use correct method name to get device info
+                    device_info = self.audio.get_device_info_by_host_api_device_index(host_api_index, i)
+
+                    if device_info['maxInputChannels'] > 0:
+                        name = device_info['name'].strip()
+
+                        # Skip default entries - we already have "System Default"
+                        if "default" in name.lower():
+                            continue
+
+                        # Add device to our list
+                        seen_names.add(name)
+                        devices.append((name, device_info['index']))  # Use the global device index
+                except Exception as e:
+                    logger.warning(f"Error accessing input device {i}: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"Error getting input devices from host API {host_api_index}: {e}")
+            # Fallback to direct device access if host API method fails
+            for i in range(self.audio.get_device_count()):
+                try:
+                    device_info = self.audio.get_device_info_by_index(i)
+                    if device_info['maxInputChannels'] > 0:
+                        name = device_info['name'].strip()
+                        if "default" in name.lower():
+                            continue
+                        seen_names.add(name)
+                        devices.append((name, i))
+                except Exception:
+                    continue
 
         return devices
 
     def get_output_devices(self):
         """Get list of available output devices"""
         devices = []
+        seen_names = set()
 
-        for i in range(self.audio.get_device_count()):
-            device_info = self.audio.get_device_info_by_index(i)
-            if device_info['maxOutputChannels'] > 0:
-                name = device_info['name']
-                devices.append((name, i))
+        # Add only one system default at index -1 (will be 0 when no specific device is selected)
+        devices.append(("System Default", -1))
+
+        # Get available host APIs
+        host_api_count = self.audio.get_host_api_count()
+        host_api_index = 0  # Default to first host API
+
+        # Choose appropriate host API based on OS
+        if self.linux:
+            # Try to find ALSA host API
+            for i in range(host_api_count):
+                api_info = self.audio.get_host_api_info_by_index(i)
+                if api_info['name'].lower().find('alsa') >= 0:
+                    host_api_index = i
+                    break
+        else:
+            # For Windows, try to use WASAPI or DirectSound
+            for i in range(host_api_count):
+                api_info = self.audio.get_host_api_info_by_index(i)
+                if api_info['name'].lower().find('wasapi') >= 0 or api_info['name'].lower().find('directsound') >= 0:
+                    host_api_index = i
+                    break
+
+        # Get devices for the selected host API
+        try:
+            api_info = self.audio.get_host_api_info_by_index(host_api_index)
+            device_count = api_info['deviceCount']
+
+            # Track speaker names to avoid duplicates
+            for i in range(device_count):
+                try:
+                    # Use correct method name to get device info
+                    device_info = self.audio.get_device_info_by_host_api_device_index(host_api_index, i)
+
+                    if device_info['maxOutputChannels'] > 0:
+                        name = device_info['name'].strip()
+
+                        # Skip default entries - we already have "System Default"
+                        if "default" in name.lower():
+                            continue
+
+                        # Add device to our list
+                        seen_names.add(name)
+                        devices.append((name, device_info['index']))  # Use the global device index
+                except Exception as e:
+                    logger.warning(f"Error accessing output device {i}: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"Error getting output devices from host API {host_api_index}: {e}")
+            # Fallback to direct device access if host API method fails
+            for i in range(self.audio.get_device_count()):
+                try:
+                    device_info = self.audio.get_device_info_by_index(i)
+                    if device_info['maxOutputChannels'] > 0:
+                        name = device_info['name'].strip()
+                        if "default" in name.lower():
+                            continue
+                        seen_names.add(name)
+                        devices.append((name, i))
+                except Exception:
+                    continue
 
         return devices
 
@@ -193,6 +314,23 @@ class AudioManager:
                 self.output_stream = None
         except Exception as e:
             logger.error(f"Error closing audio streams: {e}")
+
+    def refresh_audio_devices(self):
+        """Refresh audio devices"""
+        try:
+            # Close existing streams
+            self._close_streams()
+
+            # Reopen streams with updated devices
+            if not self._open_streams():
+                return False
+
+            logger.info("Audio devices refreshed")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error refreshing audio devices: {e}")
+            return False
 
     def _input_callback(self, in_data, frame_count, time_info, status):
         """Callback for input stream"""

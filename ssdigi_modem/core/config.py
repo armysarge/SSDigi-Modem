@@ -1,5 +1,5 @@
 """
-Configuration management for SS Ham Modem
+Configuration management for SSDigi Modem
 """
 import os
 import json
@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class Config:
-    """Configuration manager for SS Ham Modem application"""
+    """Configuration manager for SSDigi Modem application"""
 
     DEFAULT_CONFIG = {
         "audio": {
@@ -21,13 +21,17 @@ class Config:
         },
         "modem": {
             "mode": "ardop",
-            "bandwidth": "500",  # Default bandwidth in Hz
+            "bandwidth": 500,  # Default bandwidth in Hz
             "center_freq": 1500,  # Default center frequency in Hz
             "squelch": 3,  # Default squelch level
             "tx_level": 0.5,  # Default transmit audio level (0-1.0)
         },
         "user": {
             "callsign": "",  # User's amateur radio callsign
+            "grid_square": "",  # User's grid square
+            "fullname": "",  # User's fullname
+            "email": "",  # User's email address
+            "city": "",  # User's location
         },
         "hamlib": {
             "enabled": False,
@@ -41,17 +45,12 @@ class Config:
             "waterfall_colors": "default",
             "fft_size": 2048,
             "spectrum_update_rate": 10,  # Hz
-        },
-        "features": {
-            "premium_enabled": False,
-            "max_bandwidth": 500,  # Limit for free version (Hz)
-            "max_speed": 600,  # Limit for free version (bps)
         }
     }
 
     def __init__(self):
         """Initialize configuration with default values"""
-        self.config_dir = Path.home() / ".ss_ham_modem"
+        self.config_dir = Path.home() / ".ssdigi_modem"
         self.config_file = self.config_dir / "config.json"
         self.data = self.DEFAULT_CONFIG.copy()
 
