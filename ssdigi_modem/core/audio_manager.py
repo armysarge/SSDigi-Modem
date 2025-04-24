@@ -35,9 +35,7 @@ class AudioManager:
         self.recording = False
         self.playing = False
         self.input_buffer = deque(maxlen=1000)  # Store ~20 seconds at 48kHz
-        self.output_buffer = deque(maxlen=1000)
-
-        # Initialize the audio processing thread
+        self.output_buffer = deque(maxlen=1000)        # Initialize the audio processing thread
         self.audio_thread = None
         self.audio_thread_running = False
 
@@ -49,9 +47,6 @@ class AudioManager:
         """Get list of available input devices"""
         devices = []
         seen_names = set()
-
-        # Add only one system default at index -1 (will be 0 when no specific device is selected)
-        devices.append(("System Default", -1))
 
         # Get available host APIs
         host_api_count = self.audio.get_host_api_count()
@@ -66,10 +61,10 @@ class AudioManager:
                     host_api_index = i
                     break
         else:
-            # For Windows, try to use WASAPI or DirectSound
+            # For Windows, use the Windows DirectSound API to match Windows device indexing
             for i in range(host_api_count):
                 api_info = self.audio.get_host_api_info_by_index(i)
-                if api_info['name'].lower().find('wasapi') >= 0 or api_info['name'].lower().find('directsound') >= 0:
+                if api_info['name'].lower().find('directsound') >= 0:
                     host_api_index = i
                     break
 
@@ -113,6 +108,10 @@ class AudioManager:
                         devices.append((name, i))
                 except Exception:
                     continue
+
+        logger.info(f"Found {len(devices)} input devices")
+        for name, index in devices:
+            logger.info(f"Input device: {name} (index: {index})")
 
         return devices
 
@@ -182,6 +181,10 @@ class AudioManager:
                         devices.append((name, i))
                 except Exception:
                     continue
+
+        logger.info(f"Found {len(devices)} output devices")
+        for name, index in devices:
+            logger.info(f"Output device: {name} (index: {index})")
 
         return devices
 

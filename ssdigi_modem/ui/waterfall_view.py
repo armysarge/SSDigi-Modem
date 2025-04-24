@@ -110,12 +110,26 @@ class WaterfallView(QWidget):
                 self.pixel_to_bins[pixel_x].append((bin_ceil + 1, weight_ceil * 0.3))
 
     def _create_colormap(self):
-        """Create a simple blue-to-red colormap."""
+        """Create an enhanced colormap with better signal visualization."""
         colormap = []
         for i in range(256):
-            r = int(255 * i / 255)
-            g = 0
-            b = int(255 * (1 - i / 255))
+            normalized = i / 255.0
+            if normalized < 0.25:  # Dark blue to blue
+                r = 0
+                g = int(normalized * 4 * 150)
+                b = int(50 + normalized * 4 * 205)
+            elif normalized < 0.5:  # Blue to cyan
+                r = 0
+                g = int(150 + (normalized - 0.25) * 4 * 105)
+                b = 255
+            elif normalized < 0.75:  # Cyan to yellow
+                r = int((normalized - 0.5) * 4 * 255)
+                g = 255
+                b = int(255 - (normalized - 0.5) * 4 * 255)
+            else:  # Yellow to red
+                r = 255
+                g = int(255 - (normalized - 0.75) * 4 * 255)
+                b = 0
             colormap.append(QColor(r, g, b).rgb())
         return colormap
 

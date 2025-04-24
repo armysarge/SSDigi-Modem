@@ -26,7 +26,7 @@ class SettingsDialog(QDialog):
 
         self.config = config        # Create UI
         self.setWindowTitle("SSDigi Modem Settings")
-        self.setFixedSize(600, 400)  # Set fixed size
+        self.setMinimumSize(700, 500)  # Set minimum size instead of fixed
 
         # Prevent window resizing
         self.setWindowFlags(self.windowFlags() | Qt.MSWindowsFixedSizeDialogHint)
@@ -44,14 +44,13 @@ class SettingsDialog(QDialog):
 
         # Create tab widget
         self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
-
-        # Create settings tabs
+        main_layout.addWidget(self.tab_widget)        # Create settings tabs
         self._create_audio_tab()
         self._create_modem_tab()
         self._create_station_tab()
         self._create_hamlib_tab()
         self._create_ui_tab()
+        self._create_ardop_advanced_tab()
 
         # Create dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
@@ -145,6 +144,7 @@ class SettingsDialog(QDialog):
         # Mode selection
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("ARDOP", "ARDOP")
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         comm_layout.addRow("Mode:", self.mode_combo)
 
         # Bandwidth selection
@@ -163,42 +163,105 @@ class SettingsDialog(QDialog):
         comm_group.setLayout(comm_layout)
         layout.addWidget(comm_group)
 
-        # Spectrum and waterfall settings
-        spectrum_group = QGroupBox("Spectrum Display")
-        spectrum_layout = QFormLayout()
+        # ARDOP specific settings
+        self.ardop_group = QGroupBox("ARDOP Settings")
+        ardop_layout = QFormLayout()
 
-        # FFT averaging settings
-        self.fft_avg_spin = QSpinBox()
-        self.fft_avg_spin.setRange(1, 10)
-        self.fft_avg_spin.setSingleStep(1)
-        self.fft_avg_spin.setToolTip("Number of FFT frames to average (higher values give smoother spectrum)")
-        spectrum_layout.addRow("FFT Averaging:", self.fft_avg_spin)
+        # Protocol Mode (ARQ, FEC, RXO)
+        self.protocol_mode_combo = QComboBox()
+        self.protocol_mode_combo.addItem("ARQ Mode", "ARQ")
+        self.protocol_mode_combo.addItem("FEC Mode", "FEC")
+        self.protocol_mode_combo.addItem("Receive Only", "RXO")
+        self.protocol_mode_combo.setToolTip("ARQ: Automatic Repeat Request - Connection mode\n"
+                                          "FEC: Forward Error Correction - Broadcast mode\n"
+                                          "RXO: Receive Only - No transmit")
+        ardop_layout.addRow("Protocol Mode:", self.protocol_mode_combo)
 
-        # Spectrum scaling
-        self.spectrum_ref_spin = QSpinBox()
-        self.spectrum_ref_spin.setRange(-120, 0)
-        self.spectrum_ref_spin.setSingleStep(5)
-        self.spectrum_ref_spin.setSuffix(" dB")
-        self.spectrum_ref_spin.setToolTip("Reference level for spectrum display")
-        spectrum_layout.addRow("Reference Level:", self.spectrum_ref_spin)
+        # ARQ timeout
+        self.arq_timeout_spin = QSpinBox()
+        self.arq_timeout_spin.setRange(30, 240)
+        self.arq_timeout_spin.setSingleStep(10)
+        self.arq_timeout_spin.setSuffix(" sec")
+        self.arq_timeout_spin.setToolTip("Time before ARQ connection times out if idle")
+        ardop_layout.addRow("ARQ Timeout:", self.arq_timeout_spin)
 
-        # Spectrum range
-        self.spectrum_range_spin = QSpinBox()
-        self.spectrum_range_spin.setRange(30, 120)
-        self.spectrum_range_spin.setSingleStep(5)
-        self.spectrum_range_spin.setSuffix(" dB")
-        self.spectrum_range_spin.setToolTip("Range of spectrum display")
-        spectrum_layout.addRow("Display Range:", self.spectrum_range_spin)
+        # FEC repeat settings
+        self.fec_repeats_spin = QSpinBox()
+        self.fec_repeats_spin.setRange(0, 5)
+        self.fec_repeats_spin.setToolTip("Number of times to repeat FEC transmissions (0-5)")
+        ardop_layout.addRow("FEC Repeats:", self.fec_repeats_spin)
 
-        # Waterfall settings
-        self.waterfall_speed_combo = QComboBox()
-        self.waterfall_speed_combo.addItem("Slow", "slow")
-        self.waterfall_speed_combo.addItem("Medium", "medium")
-        self.waterfall_speed_combo.addItem("Fast", "fast")
-        spectrum_layout.addRow("Waterfall Speed:", self.waterfall_speed_combo)
+        # Leader length
+        self.leader_spin = QSpinBox()
+        self.leader_spin.setRange(120, 2500)
+        self.leader_spin.setSingleStep(10)
+        self.leader_spin.setSuffix(" ms")
+        self.leader_spin.setToolTip("Sync leader length in milliseconds (120-2500)")
+        ardop_layout.addRow("Leader Length:", self.leader_spin)
 
-        spectrum_group.setLayout(spectrum_layout)
-        layout.addWidget(spectrum_group)
+        # Trailer length
+        self.trailer_spin = QSpinBox()
+        self.trailer_spin.setRange(0, 200)
+        self.trailer_spin.setSingleStep(5)
+        self.trailer_spin.setSuffix(" ms")
+        self.trailer_spin.setToolTip("Trailer tone length in milliseconds (0-200)")
+        ardop_layout.addRow("Trailer Length:", self.trailer_spin)
+
+        # Squelch level
+        self.squelch_spin = QSpinBox()
+        self.squelch_spin.setRange(1, 10)
+        self.squelch_spin.setToolTip("Squelch level (1-10), lower is more sensitive")
+        ardop_layout.addRow("Squelch:", self.squelch_spin)
+
+        # Busy detection
+        self.busydet_spin = QSpinBox()
+        self.busydet_spin.setRange(0, 9)
+        self.busydet_spin.setToolTip("Busy detection sensitivity (0=most sensitive, 9=least sensitive)")
+        ardop_layout.addRow("Busy Detection:", self.busydet_spin)
+
+        # Extra delay
+        self.extradelay_spin = QSpinBox()
+        self.extradelay_spin.setRange(0, 1000)
+        self.extradelay_spin.setSingleStep(10)
+        self.extradelay_spin.setSuffix(" ms")
+        self.extradelay_spin.setToolTip("Extra delay between RX and TX")
+        ardop_layout.addRow("Extra Delay:", self.extradelay_spin)
+
+        # Console log verbosity
+        self.consolelog_spin = QSpinBox()
+        self.consolelog_spin.setRange(1, 6)
+        self.consolelog_spin.setToolTip("Console log verbosity (1-6, 1=most verbose)")
+        ardop_layout.addRow("Console Log Level:", self.consolelog_spin)
+
+        # Advanced options
+        self.cwid_check = QCheckBox()
+        self.cwid_check.setToolTip("Send CW ID after IDFRAME")
+        ardop_layout.addRow("CW ID:", self.cwid_check)
+
+        self.fsk_only_check = QCheckBox()
+        self.fsk_only_check.setToolTip("Use only FSK modes (no PSK or QAM)")
+        ardop_layout.addRow("FSK Only:", self.fsk_only_check)
+
+        self.use600_check = QCheckBox()
+        self.use600_check.setToolTip("Enable 600 baud modes for FM/2m")
+        ardop_layout.addRow("Use 600 Baud:", self.use600_check)
+
+        self.faststart_check = QCheckBox()
+        self.faststart_check.setToolTip("Start ARQ with faster speed frames")
+        ardop_layout.addRow("Fast Start:", self.faststart_check)
+
+        # Custom commands
+        self.custom_commands = QLineEdit()
+        self.custom_commands.setToolTip("Additional semicolon-separated ARDOP commands")
+        ardop_layout.addRow("Custom Commands:", self.custom_commands)
+
+        # Add Reset to Defaults button
+        reset_button = QPushButton("Reset to Defaults")
+        reset_button.clicked.connect(self._reset_modem_settings)
+        ardop_layout.addRow("", reset_button)
+
+        self.ardop_group.setLayout(ardop_layout)
+        layout.addWidget(self.ardop_group)        # Placeholder - removed spectrum settings (moved to Display tab)
 
         # Add stretch
         layout.addStretch(1)
@@ -347,10 +410,8 @@ class SettingsDialog(QDialog):
         ui_layout.addRow("Spectrum Update Rate:", self.update_rate_spin)
 
         ui_group.setLayout(ui_layout)
-        layout.addWidget(ui_group)
-
-        # Display settings
-        display_group = QGroupBox("Display Settings")
+        layout.addWidget(ui_group)        # Display settings
+        display_group = QGroupBox("Display Options")
         display_layout = QFormLayout()
 
         self.show_freq_check = QCheckBox()
@@ -368,11 +429,188 @@ class SettingsDialog(QDialog):
         display_group.setLayout(display_layout)
         layout.addWidget(display_group)
 
+        # Spectrum and waterfall settings (moved from Modem tab)
+        spectrum_group = QGroupBox("Spectrum Display")
+        spectrum_layout = QFormLayout()
+
+        # FFT averaging settings
+        self.fft_avg_spin = QSpinBox()
+        self.fft_avg_spin.setRange(1, 10)
+        self.fft_avg_spin.setSingleStep(1)
+        self.fft_avg_spin.setToolTip("Number of FFT frames to average (higher values give smoother spectrum)")
+        spectrum_layout.addRow("FFT Averaging:", self.fft_avg_spin)
+
+        # Spectrum scaling
+        self.spectrum_ref_spin = QSpinBox()
+        self.spectrum_ref_spin.setRange(-120, 0)
+        self.spectrum_ref_spin.setSingleStep(5)
+        self.spectrum_ref_spin.setSuffix(" dB")
+        self.spectrum_ref_spin.setToolTip("Reference level for spectrum display")
+        spectrum_layout.addRow("Reference Level:", self.spectrum_ref_spin)
+
+        # Spectrum range
+        self.spectrum_range_spin = QSpinBox()
+        self.spectrum_range_spin.setRange(30, 120)
+        self.spectrum_range_spin.setSingleStep(5)
+        self.spectrum_range_spin.setSuffix(" dB")
+        self.spectrum_range_spin.setToolTip("Range of spectrum display")
+        spectrum_layout.addRow("Display Range:", self.spectrum_range_spin)
+
+        # Waterfall settings
+        self.waterfall_speed_combo = QComboBox()
+        self.waterfall_speed_combo.addItem("Slow", "slow")
+        self.waterfall_speed_combo.addItem("Medium", "medium")
+        self.waterfall_speed_combo.addItem("Fast", "fast")
+        spectrum_layout.addRow("Waterfall Speed:", self.waterfall_speed_combo)
+
+        spectrum_group.setLayout(spectrum_layout)
+        layout.addWidget(spectrum_group)
+
         # Add stretch
         layout.addStretch(1)
 
         # Add to tab widget
         self.tab_widget.addTab(ui_tab, "Display")    # Network settings tab removed - host application interface settings now hard-coded
+
+    def _create_ardop_advanced_tab(self):
+        """Create advanced ARDOP settings tab"""
+        ardop_tab = QWidget()
+        layout = QVBoxLayout(ardop_tab)
+
+        # ARQ Settings Group
+        arq_group = QGroupBox("ARQ Settings")
+        arq_layout = QFormLayout()
+
+        # ARQ Bandwidth Enforcement Mode
+        self.arq_bw_combo = QComboBox()
+        self.arq_bw_combo.addItem("Max - Try to negotiate up to max", "MAX")
+        self.arq_bw_combo.addItem("Force - Only use exact bandwidth", "FORCE")
+        self.arq_bw_combo.setToolTip("ARQBW enforcement mode:\nMAX - Try to negotiate up to specified bandwidth\nFORCE - Only use exactly the specified bandwidth")
+        arq_layout.addRow("ARQBW Mode:", self.arq_bw_combo)
+
+        # Call Bandwidth (CALLBW)
+        self.callbw_combo = QComboBox()
+        self.callbw_combo.addItem("Use ARQBW Setting", "UNDEFINED")
+        self.callbw_combo.addItem("200Hz Max", "200MAX")
+        self.callbw_combo.addItem("200Hz Force", "200FORCE")
+        self.callbw_combo.addItem("500Hz Max", "500MAX")
+        self.callbw_combo.addItem("500Hz Force", "500FORCE")
+        self.callbw_combo.addItem("1000Hz Max", "1000MAX")
+        self.callbw_combo.addItem("1000Hz Force", "1000FORCE")
+        self.callbw_combo.addItem("2000Hz Max", "2000MAX")
+        self.callbw_combo.addItem("2000Hz Force", "2000FORCE")
+        self.callbw_combo.setToolTip("Bandwidth used for ARQCALL, overrides ARQBW unless set to UNDEFINED")
+        arq_layout.addRow("Call Bandwidth:", self.callbw_combo)
+
+        # Auto Break
+        self.autobreak_check = QCheckBox()
+        self.autobreak_check.setToolTip("Automatically handle ARQ flow control (recommended)")
+        arq_layout.addRow("Auto Break:", self.autobreak_check)
+
+        # Busy Block
+        self.busyblock_check = QCheckBox()
+        self.busyblock_check.setToolTip("Reject incoming connections when channel is busy")
+        arq_layout.addRow("Busy Block:", self.busyblock_check)
+
+        arq_group.setLayout(arq_layout)
+        layout.addWidget(arq_group)
+
+        # FEC Settings Group
+        fec_group = QGroupBox("FEC Settings")
+        fec_layout = QFormLayout()
+
+        # FEC Mode for transmission
+        self.fec_mode_combo = QComboBox()
+        # Add FEC modes from the documentation
+        fec_modes = [
+            "4FSK.200.50S", "4PSK.200.100S", "4PSK.200.100", "8PSK.200.100", "16QAM.200.100",
+            "4FSK.500.100S", "4FSK.500.100", "4PSK.500.100", "8PSK.500.100", "16QAM.500.100",
+            "4PSK.1000.100", "8PSK.1000.100", "16QAM.1000.100",
+            "4PSK.2000.100", "8PSK.2000.100", "16QAM.2000.100",
+            "4FSK.2000.600", "4FSK.2000.600S"
+        ]
+        for mode in fec_modes:
+            self.fec_mode_combo.addItem(mode, mode)
+        self.fec_mode_combo.setToolTip("FEC frame type for data transmission")
+        fec_layout.addRow("FEC Mode:", self.fec_mode_combo)
+
+        # FEC ID
+        self.fec_id_check = QCheckBox()
+        self.fec_id_check.setToolTip("Automatically transmit ID frame with every FEC transmission")
+        fec_layout.addRow("Send FEC ID:", self.fec_id_check)
+
+        fec_group.setLayout(fec_layout)
+        layout.addWidget(fec_group)
+
+        # Tuning Settings Group
+        tuning_group = QGroupBox("Tuning Settings")
+        tuning_layout = QFormLayout()
+
+        # Tuning Range
+        self.tuning_range_spin = QSpinBox()
+        self.tuning_range_spin.setRange(0, 200)
+        self.tuning_range_spin.setSingleStep(10)
+        self.tuning_range_spin.setSuffix(" Hz")
+        self.tuning_range_spin.setToolTip("How many Hz from center frequency an incoming signal can be decoded")
+        tuning_layout.addRow("Tuning Range:", self.tuning_range_spin)
+
+        # Input Noise (for testing)
+        self.input_noise_spin = QSpinBox()
+        self.input_noise_spin.setRange(0, 20000)
+        self.input_noise_spin.setSingleStep(1000)
+        self.input_noise_spin.setToolTip("Add simulated Gaussian noise to input (diagnostic use only)")
+        tuning_layout.addRow("Input Noise:", self.input_noise_spin)
+
+        tuning_group.setLayout(tuning_layout)
+        layout.addWidget(tuning_group)
+
+        # Debug Settings Group
+        debug_group = QGroupBox("Debug Settings")
+        debug_layout = QFormLayout()
+
+        # Debug Log
+        self.debug_log_check = QCheckBox()
+        self.debug_log_check.setToolTip("Write debug log to disk")
+        debug_layout.addRow("Debug Log:", self.debug_log_check)
+
+        # Log Directory
+        self.log_dir_edit = QLineEdit()
+        self.log_dir_edit.setToolTip("Directory to write log files")
+        browse_button = QPushButton("Browse...")
+        browse_button.clicked.connect(self._browse_log_dir)
+
+        log_dir_layout = QHBoxLayout()
+        log_dir_layout.addWidget(self.log_dir_edit)
+        log_dir_layout.addWidget(browse_button)
+
+        debug_layout.addRow("Log Directory:", log_dir_layout)
+
+        # Log Level
+        self.log_level_spin = QSpinBox()
+        self.log_level_spin.setRange(1, 6)
+        self.log_level_spin.setToolTip("Log level (1-6, 1=most verbose)")
+        debug_layout.addRow("Log Level:", self.log_level_spin)
+
+        # Command Trace
+        self.cmd_trace_check = QCheckBox()
+        self.cmd_trace_check.setToolTip("Record commands in log file")
+        debug_layout.addRow("Command Trace:", self.cmd_trace_check)
+
+        debug_group.setLayout(debug_layout)
+        layout.addWidget(debug_group)
+
+        # Add stretch
+        layout.addStretch(1)
+
+        # Add to tab widget
+        self.tab_widget.addTab(ardop_tab, "ARDOP Advanced")
+
+    def _browse_log_dir(self):
+        """Browse for log directory"""
+        log_dir = QFileDialog.getExistingDirectory(self, "Select Log Directory",
+                                                  self.log_dir_edit.text())
+        if log_dir:
+            self.log_dir_edit.setText(log_dir)
 
     def _refresh_audio_devices(self):
         """Refresh available audio devices"""
@@ -388,7 +626,8 @@ class SettingsDialog(QDialog):
             # Create temporary AudioManager
             audio_mgr = AudioManager(self.config)
 
-            try:                # Add "System Default" option with special index
+            try:
+                # Add "System Default" option with special index
                 self.input_combo.addItem("System Default", -1)
                 self.output_combo.addItem("System Default", -1)
 
@@ -500,6 +739,25 @@ class SettingsDialog(QDialog):
             # Set center frequency
             self.center_freq_spin.setValue(self.config.get('modem', 'center_freq'))
 
+            # Load ARDOP specific settings
+            protocol_mode = self.config.get('modem', 'protocol_mode', 'ARQ')
+            protocol_index = self.protocol_mode_combo.findData(protocol_mode)
+            self.protocol_mode_combo.setCurrentIndex(max(0, protocol_index))
+
+            self.arq_timeout_spin.setValue(self.config.get('modem', 'arq_timeout', 120))
+            self.fec_repeats_spin.setValue(self.config.get('modem', 'fec_repeats', 0))
+            self.leader_spin.setValue(self.config.get('modem', 'leader', 120))
+            self.trailer_spin.setValue(self.config.get('modem', 'trailer', 0))
+            self.squelch_spin.setValue(self.config.get('modem', 'squelch', 5))
+            self.busydet_spin.setValue(self.config.get('modem', 'busydet', 5))
+            self.extradelay_spin.setValue(self.config.get('modem', 'extradelay', 0))
+            self.consolelog_spin.setValue(self.config.get('modem', 'consolelog', 6))
+            self.cwid_check.setChecked(self.config.get('modem', 'cwid', False))
+            self.fsk_only_check.setChecked(self.config.get('modem', 'fskonly', False))
+            self.use600_check.setChecked(self.config.get('modem', 'use600modes', False))
+            self.faststart_check.setChecked(self.config.get('modem', 'faststart', True))
+            self.custom_commands.setText(self.config.get('modem', 'custom_commands', ''))
+
             # Set spectrum settings
             self.fft_avg_spin.setValue(self.config.get('ui', 'fft_average_frames', 2))
             self.spectrum_ref_spin.setValue(self.config.get('ui', 'spectrum_ref_level', -60))
@@ -531,7 +789,8 @@ class SettingsDialog(QDialog):
             # Set other HAMLIB settings
             self.port_edit.setText(self.config.get('hamlib', 'port'))
             self.baud_combo.setCurrentText(str(self.config.get('hamlib', 'baud_rate')))
-            self.ptt_combo.setCurrentText(self.config.get('hamlib', 'ptt_control'))            # Load UI settings
+            self.ptt_combo.setCurrentText(self.config.get('hamlib', 'ptt_control'))
+            # Load UI settings
             self.theme_combo.setCurrentText(self.config.get('ui', 'theme').capitalize())
             self.waterfall_combo.setCurrentText(self.config.get('ui', 'waterfall_colors').capitalize())
 
@@ -542,6 +801,42 @@ class SettingsDialog(QDialog):
             self.show_grid_check.setChecked(self.config.get('ui', 'show_grid', True))
             self.average_check.setChecked(self.config.get('ui', 'fft_average', False))
             self.peak_hold_check.setChecked(self.config.get('ui', 'peak_hold', False))
+
+            # Load ARDOP Advanced settings
+            # ARQ Settings
+            arqbw_mode = self.config.get('modem', 'arqbw_mode', 'MAX')
+            if arqbw_mode == 'MAX':
+                self.arq_bw_combo.setCurrentIndex(0)
+            else:
+                self.arq_bw_combo.setCurrentIndex(1)
+
+            callbw = self.config.get('modem', 'callbw', 'UNDEFINED')
+            for i in range(self.callbw_combo.count()):
+                if self.callbw_combo.itemData(i) == callbw:
+                    self.callbw_combo.setCurrentIndex(i)
+                    break
+
+            self.autobreak_check.setChecked(self.config.get('modem', 'autobreak', True))
+            self.busyblock_check.setChecked(self.config.get('modem', 'busyblock', False))
+
+            # FEC Settings
+            fec_mode = self.config.get('modem', 'fec_mode', '4FSK.500.100S')
+            for i in range(self.fec_mode_combo.count()):
+                if self.fec_mode_combo.itemData(i) == fec_mode:
+                    self.fec_mode_combo.setCurrentIndex(i)
+                    break
+
+            self.fec_id_check.setChecked(self.config.get('modem', 'fec_id', False))
+
+            # Tuning Settings
+            self.tuning_range_spin.setValue(self.config.get('modem', 'tuning_range', 100))
+            self.input_noise_spin.setValue(self.config.get('modem', 'input_noise', 0))
+
+            # Debug Settings
+            self.debug_log_check.setChecked(self.config.get('modem', 'debug_log', False))
+            self.log_dir_edit.setText(self.config.get('modem', 'log_dir', ''))
+            self.log_level_spin.setValue(self.config.get('modem', 'log_level', 6))
+            self.cmd_trace_check.setChecked(self.config.get('modem', 'cmd_trace', False))
 
         except Exception as e:
             logger.exception(f"Error loading settings: {e}")
@@ -566,6 +861,22 @@ class SettingsDialog(QDialog):
             self.config.set('modem', 'mode', self.mode_combo.currentData())
             self.config.set('modem', 'bandwidth', self.bandwidth_combo.currentData())
             self.config.set('modem', 'center_freq', self.center_freq_spin.value())
+
+            # Apply ARDOP specific settings
+            self.config.set('modem', 'protocol_mode', self.protocol_mode_combo.currentData())
+            self.config.set('modem', 'arq_timeout', self.arq_timeout_spin.value())
+            self.config.set('modem', 'fec_repeats', self.fec_repeats_spin.value())
+            self.config.set('modem', 'leader', self.leader_spin.value())
+            self.config.set('modem', 'trailer', self.trailer_spin.value())
+            self.config.set('modem', 'squelch', self.squelch_spin.value())
+            self.config.set('modem', 'busydet', self.busydet_spin.value())
+            self.config.set('modem', 'extradelay', self.extradelay_spin.value())
+            self.config.set('modem', 'consolelog', self.consolelog_spin.value())
+            self.config.set('modem', 'cwid', self.cwid_check.isChecked())
+            self.config.set('modem', 'fskonly', self.fsk_only_check.isChecked())
+            self.config.set('modem', 'use600modes', self.use600_check.isChecked())
+            self.config.set('modem', 'faststart', self.faststart_check.isChecked())
+            self.config.set('modem', 'custom_commands', self.custom_commands.text())
 
             # Apply spectrum settings
             self.config.set('ui', 'fft_average_frames', self.fft_avg_spin.value())
@@ -654,3 +965,47 @@ class SettingsDialog(QDialog):
         # Automatically refresh audio devices when dialog is opened
         self._refresh_audio_devices()
         logger.info("Settings dialog opened, audio devices refreshed")
+
+    def _on_mode_changed(self):
+        """Handle modem mode change"""
+        # Show or hide ARDOP settings based on selected mode
+        current_mode = self.mode_combo.currentData()
+
+        # Show ARDOP settings only when ARDOP is selected
+        self.ardop_group.setVisible(current_mode == "ARDOP")
+
+        # Show/hide ARDOP advanced tab
+        for i in range(self.tab_widget.count()):
+            if self.tab_widget.tabText(i) == "ARDOP Advanced":
+                self.tab_widget.setTabVisible(i, current_mode == "ARDOP")
+                break
+
+    def _reset_modem_settings(self):
+        """Reset modem settings to defaults"""
+        try:
+            # Reset ARDOP specific settings to defaults
+            self.protocol_mode_combo.setCurrentIndex(0)  # ARQ Mode
+            self.arq_timeout_spin.setValue(120)          # 120 seconds
+            self.fec_repeats_spin.setValue(0)            # No repeats
+            self.leader_spin.setValue(120)               # 120 ms
+            self.trailer_spin.setValue(0)                # 0 ms
+            self.squelch_spin.setValue(5)                # Squelch level 5
+            self.busydet_spin.setValue(5)                # Busy detection level 5
+            self.extradelay_spin.setValue(0)             # No extra delay
+            self.consolelog_spin.setValue(6)             # Verbosity level 6
+            self.cwid_check.setChecked(False)            # CW ID off
+            self.fsk_only_check.setChecked(False)        # FSK only off
+            self.use600_check.setChecked(False)          # 600 baud modes off
+            self.faststart_check.setChecked(True)        # Fast start on
+            self.custom_commands.clear()                  # Clear custom commands
+
+            # Optionally, show a message box to inform the user
+            QMessageBox.information(self, "Settings Reset",
+                                    "Modem settings have been reset to defaults.")
+
+            logger.info("Modem settings reset to defaults")
+
+        except Exception as e:
+            logger.exception(f"Error resetting modem settings: {e}")
+            QMessageBox.warning(self, "Error",
+                              f"Failed to reset modem settings: {str(e)}")

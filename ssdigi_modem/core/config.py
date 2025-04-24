@@ -24,7 +24,7 @@ class Config:
             "bandwidth": 500,  # Default bandwidth in Hz
             "center_freq": 1500,  # Default center frequency in Hz
             "squelch": 3,  # Default squelch level
-            "tx_level": 0.5,  # Default transmit audio level (0-1.0)
+            "tx_level": 1.0,  # Default transmit audio level (0-1.0)
         },
         "user": {
             "callsign": "",  # User's amateur radio callsign

@@ -78,12 +78,12 @@ class ModemManager:
         """Send text message"""
         return self.active_modem.send_text(text)
 
-    def send_pingack(self):
-        """Send PINGACK command for testing ARDOP functionality"""
-        if hasattr(self.active_modem, 'send_pingack'):
-            return self.active_modem.send_pingack()
+    def send_ping(self):
+        """Send PING command for testing functionality"""
+        if hasattr(self.active_modem, 'send_ping'):
+            return self.active_modem.send_ping()
         else:
-            logger.warning(f"PINGACK not supported by {self.mode} modem")
+            logger.warning(f"PING not supported by {self.mode} modem")
             return False
 
     def save_to_wav(self, file_path):

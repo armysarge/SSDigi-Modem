@@ -192,25 +192,29 @@ class MainWindow(QMainWindow):
         self.cpu_label = QLabel("---%")
         self.cpu_label.setStyleSheet(value_style)
         monitoring_layout.addWidget(QLabel("CPU:"), 2, 0)
-        monitoring_layout.addWidget(self.cpu_label, 2, 1)
-
-        # VU Meter (audio level)
+        monitoring_layout.addWidget(self.cpu_label, 2, 1)        # VU Meter (audio level)
         self.vu_label = QLabel("-∞ dB")
         self.vu_label.setStyleSheet(value_style)
         monitoring_layout.addWidget(QLabel("VU:"), 3, 0)
         monitoring_layout.addWidget(self.vu_label, 3, 1)
 
+        # Decoded Frame (for ARDOP mode)
+        self.decoded_frame_label = QLabel("---")
+        self.decoded_frame_label.setStyleSheet(value_style)
+        monitoring_layout.addWidget(QLabel("Frame:"), 4, 0)
+        monitoring_layout.addWidget(self.decoded_frame_label, 4, 1)
+
         # AFC (Automatic Frequency Control)
         self.afc_label = QLabel("±0 Hz")
         self.afc_label.setStyleSheet(value_style)
-        monitoring_layout.addWidget(QLabel("AFC:"), 4, 0)
-        monitoring_layout.addWidget(self.afc_label, 4, 1)
+        monitoring_layout.addWidget(QLabel("AFC:"), 5, 0)
+        monitoring_layout.addWidget(self.afc_label, 5, 1)
 
         # Buffer status
         self.buffer_label = QLabel("0%")
         self.buffer_label.setStyleSheet(value_style)
-        monitoring_layout.addWidget(QLabel("Buffer:"), 5, 0)
-        monitoring_layout.addWidget(self.buffer_label, 5, 1)
+        monitoring_layout.addWidget(QLabel("Buffer:"), 6, 0)
+        monitoring_layout.addWidget(self.buffer_label, 6, 1)
 
         control_layout.addWidget(monitoring_group)
 
@@ -219,12 +223,12 @@ class MainWindow(QMainWindow):
         ardop_controls_layout = QVBoxLayout()
         self.ardop_controls_group.setLayout(ardop_controls_layout)
 
-        # Add PINGACK button for ARDOP testing
-        self.pingack_button = QPushButton("Send PINGACK")
-        self.pingack_button.setToolTip("Send PINGACK command to test ARDOP connection")
-        self.pingack_button.clicked.connect(self.send_pingack)
-        self.pingack_button.setStyleSheet(button_style)
-        ardop_controls_layout.addWidget(self.pingack_button)
+        # Add PING button for ARDOP testing
+        self.ping_button = QPushButton("Send PING")
+        self.ping_button.setToolTip("Send PING command to test ARDOP connection")
+        self.ping_button.clicked.connect(self.send_ping)
+        self.ping_button.setStyleSheet(button_style)
+        ardop_controls_layout.addWidget(self.ping_button)
 
         # Add to control layout - default to hidden, will show when ARDOP mode is active
         control_layout.addWidget(self.ardop_controls_group)
@@ -241,44 +245,27 @@ class MainWindow(QMainWindow):
         # Right side - Visualizations - FIXED LAYOUT
         vis_panel = QGroupBox("Spectrum Analysis")
 
-        # Use a margin style that leaves room for the title
-        vis_panel.setStyleSheet("""
-            QGroupBox {
-                margin-top: 20px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding-left: 10px;
-                padding-right: 10px;
-                padding-top: 3px;
-                padding-bottom: 3px;
-            }
-        """)
-
         # Set proper layout with more spacing at the top
         vis_layout = QVBoxLayout()
-        vis_layout.setSpacing(5)
-        vis_layout.setContentsMargins(5, 25, 5, 5)  # More top margin for title
         vis_panel.setLayout(vis_layout)
 
         # Create visualization container
         vis_container = QWidget()
         vis_container.setContentsMargins(2, 2, 2, 2)
         vis_container_layout = QVBoxLayout(vis_container)
-        vis_container_layout.setSpacing(5)
+        vis_container_layout.setSpacing(0)
         vis_container_layout.setContentsMargins(0, 5, 0, 0)  # Add some padding at top
+
+        # Create waterfall view with proper size
+        self.waterfall_view = WaterfallView(self.config)
+        self.waterfall_view.setMinimumWidth(400)
+        vis_container_layout.addWidget(self.waterfall_view)
 
         # Create spectrum view with proper size
         self.spectrum_view = SpectrumView(self.config)
         self.spectrum_view.setMinimumSize(400, 130)
         self.spectrum_view.setMaximumHeight(150)
         vis_container_layout.addWidget(self.spectrum_view)
-
-        # Create waterfall view with proper size
-        self.waterfall_view = WaterfallView(self.config)
-        self.waterfall_view.setMinimumWidth(400)
-        vis_container_layout.addWidget(self.waterfall_view)
 
         # Add the container to the panel layout
         vis_layout.addWidget(vis_container)
@@ -404,15 +391,31 @@ class MainWindow(QMainWindow):
 
             # AFC Status
             afc_offset = status.get('afc_offset', 0)
-            self.afc_label.setText(f"±{abs(afc_offset):.0f} Hz")
-
-            # Buffer Status
+            self.afc_label.setText(f"±{abs(afc_offset):.0f} Hz")            # Buffer Status
             buffer_used = status.get('buffer_used', 0)
             self.buffer_label.setText(f"{buffer_used:.0f}%")
             if buffer_used > 90:
                 self.buffer_label.setStyleSheet(value_style % "#ff0000")  # Red when near full
             else:
                 self.buffer_label.setStyleSheet(value_style % "#2196F3")
+
+            # Decoded Frame (for ARDOP mode)
+            if is_ardop_mode:
+                # Get the most recently decoded frame from status
+                decoded_frame = status.get('decoded_frame', '---')
+                if decoded_frame and decoded_frame != '---':
+                    # Truncate if too long
+                    if len(decoded_frame) > 10:
+                        decoded_frame = decoded_frame[:8] + "..."
+                    self.decoded_frame_label.setText(decoded_frame)
+                    self.decoded_frame_label.setStyleSheet(value_style % "#00ff00")  # Green for active frame
+                else:
+                    self.decoded_frame_label.setText("---")
+                    self.decoded_frame_label.setStyleSheet(value_style % "#2196F3")  # Default color
+            else:
+                # Non-ARDOP mode - hide or show placeholder
+                self.decoded_frame_label.setText("---")
+                self.decoded_frame_label.setStyleSheet(value_style % "#2196F3")
 
             # Update HAMLIB status if enabled
             if self.hamlib_manager.is_connected():
@@ -661,14 +664,6 @@ class MainWindow(QMainWindow):
         self.status_labels['mode'].setText(self.config.get('modem', 'mode'))
         self.status_labels['bandwidth'].setText(f"{self.config.get('modem', 'bandwidth')} Hz")
 
-    def _send_message(self):
-        """Send a text message"""
-        if self.message_input.text():
-            message = self.message_input.text()
-            self.message_display.append(f"TX: {message}")
-            self.modem_manager.send_text(message)
-            self.message_input.clear()
-
     def _save_log(self):
         """Save the log to a file"""
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Log", "", "Log Files (*.log)")
@@ -766,19 +761,19 @@ class MainWindow(QMainWindow):
             self.stations_table.removeRow(row)
 
     @pyqtSlot()
-    def send_pingack(self):
-        """Send PINGACK command to ARDOP for testing"""
+    def send_ping(self):
+        """Send PING command for testing"""
         if not self.modem_manager.is_connected():
             QMessageBox.warning(self, "Not Connected", "Please connect to the modem first.")
             return
 
         try:
-            if self.modem_manager.send_pingack():
-                self.status_bar.showMessage("PINGACK command sent", 3000)
-                logger.info("PINGACK command sent successfully")
+            if self.modem_manager.send_ping():
+                self.status_bar.showMessage("PING command sent", 3000)
+                logger.info("PING command sent successfully")
             else:
-                QMessageBox.warning(self, "Command Failed", "Failed to send PINGACK command.")
-                logger.error("Failed to send PINGACK command")
+                QMessageBox.warning(self, "Command Failed", "Failed to send PING command.")
+                logger.error("Failed to send PING command")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error sending PINGACK: {str(e)}")
-            logger.exception("Error sending PINGACK")
+            QMessageBox.critical(self, "Error", f"Error sending PING: {str(e)}")
+            logger.exception("Error sending PING")
