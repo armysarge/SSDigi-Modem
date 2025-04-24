@@ -213,6 +213,23 @@ class MainWindow(QMainWindow):
         monitoring_layout.addWidget(self.buffer_label, 5, 1)
 
         control_layout.addWidget(monitoring_group)
+
+        # Add ARDOP-specific controls
+        self.ardop_controls_group = QGroupBox("ARDOP Controls")
+        ardop_controls_layout = QVBoxLayout()
+        self.ardop_controls_group.setLayout(ardop_controls_layout)
+
+        # Add PINGACK button for ARDOP testing
+        self.pingack_button = QPushButton("Send PINGACK")
+        self.pingack_button.setToolTip("Send PINGACK command to test ARDOP connection")
+        self.pingack_button.clicked.connect(self.send_pingack)
+        self.pingack_button.setStyleSheet(button_style)
+        ardop_controls_layout.addWidget(self.pingack_button)
+
+        # Add to control layout - default to hidden, will show when ARDOP mode is active
+        control_layout.addWidget(self.ardop_controls_group)
+        self.ardop_controls_group.setVisible(False)
+
         control_layout.addStretch()
 
         # Add control panel to left panel
@@ -343,6 +360,11 @@ class MainWindow(QMainWindow):
             # Update modem status
             status = self.modem_manager.get_status()
 
+            # Show/hide ARDOP controls based on mode
+            mode = status.get('mode', '').upper()
+            is_ardop_mode = mode == 'ARDOP'
+            self.ardop_controls_group.setVisible(is_ardop_mode)
+
             # RX/TX Indicators
             rx_active = status.get('rx_active', False)
             tx_active = status.get('tx_active', False)
@@ -360,10 +382,21 @@ class MainWindow(QMainWindow):
             # CPU Usage
             cpu = status.get('cpu_usage', 0)
             self.cpu_label.setText(f"{cpu:.1f}%")
+            value_style = """
+                QLabel {
+                    color: %s;
+                    font-family: 'Consolas', monospace;
+                    font-size: 12px;
+                    padding: 2px;
+                    border: 1px solid #404040;
+                    background: #1a1a1a;
+                    border-radius: 2px;
+                }
+            """
             if cpu > 80:
-                self.cpu_label.setStyleSheet("QLabel { color: #ff0000; }")  # Red when high
+                self.cpu_label.setStyleSheet(value_style % "#ff0000")  # Red when high
             else:
-                self.cpu_label.setStyleSheet("QLabel { color: #2196F3; }")
+                self.cpu_label.setStyleSheet(value_style % "#2196F3")
 
             # VU Meter (audio level)
             vu = status.get('audio_level', -60)
@@ -377,9 +410,9 @@ class MainWindow(QMainWindow):
             buffer_used = status.get('buffer_used', 0)
             self.buffer_label.setText(f"{buffer_used:.0f}%")
             if buffer_used > 90:
-                self.buffer_label.setStyleSheet("QLabel { color: #ff0000; }")  # Red when near full
+                self.buffer_label.setStyleSheet(value_style % "#ff0000")  # Red when near full
             else:
-                self.buffer_label.setStyleSheet("QLabel { color: #2196F3; }")
+                self.buffer_label.setStyleSheet(value_style % "#2196F3")
 
             # Update HAMLIB status if enabled
             if self.hamlib_manager.is_connected():
@@ -731,3 +764,21 @@ class MainWindow(QMainWindow):
         # Remove rows from bottom to top to avoid index issues
         for row in sorted(rows_to_remove, reverse=True):
             self.stations_table.removeRow(row)
+
+    @pyqtSlot()
+    def send_pingack(self):
+        """Send PINGACK command to ARDOP for testing"""
+        if not self.modem_manager.is_connected():
+            QMessageBox.warning(self, "Not Connected", "Please connect to the modem first.")
+            return
+
+        try:
+            if self.modem_manager.send_pingack():
+                self.status_bar.showMessage("PINGACK command sent", 3000)
+                logger.info("PINGACK command sent successfully")
+            else:
+                QMessageBox.warning(self, "Command Failed", "Failed to send PINGACK command.")
+                logger.error("Failed to send PINGACK command")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error sending PINGACK: {str(e)}")
+            logger.exception("Error sending PINGACK")

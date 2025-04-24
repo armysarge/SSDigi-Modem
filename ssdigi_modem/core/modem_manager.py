@@ -794,3 +794,13 @@ class ModemManager:
         except Exception as e:
             logger.exception(f"Error updating modem settings: {e}")
             return False
+
+    def send_pingack(self):
+        """Send PINGACK command to ARDOP - useful for testing and diagnostics"""
+        logger.info("Sending PINGACK command to ARDOP")
+        if not self.connected:
+            logger.warning("Cannot send PINGACK: Modem not connected")
+            return False
+
+        # Send the command via the command socket
+        return self._send_command("PINGACK")

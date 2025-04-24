@@ -140,15 +140,10 @@ class WaterfallView(QWidget):
 
         # Special handling for the 2000 Hz bandwidth case
         if abs(self.bandwidth - 2000) < 10:  # Check if bandwidth is approximately 2000 Hz
-            # Print diagnostic info
-            print(f"Bandwidth 2000Hz special case - FFT size: {self.fft_size}, Data length: {len(fft_data)}")
-
             # Simplify the approach - use a hardcoded range that we know works
             # This is a pragmatic workaround specific to 2000 Hz bandwidth
             self.start_bin = max(0, min(60, len(fft_data) - 100))  # Empirically chosen safe values
             self.end_bin = min(len(fft_data) - 1, self.start_bin + 100)
-
-            print(f"Using hardcoded bin range: {self.start_bin} to {self.end_bin}")
 
         # Map FFT data to color indices
         fft_data = np.clip(fft_data, self.min_value, self.max_value)

@@ -144,6 +144,7 @@ This project is under active development. Contributions are welcome! Please feel
 
 ## Acknowledgments
 
+[![ARDOP](https://www.github.com/pflarue/ardop)](https://www.github.com/pflarue/ardop)
 Ardobcf is a derivative of the original ARDOP project, which is a software modem for amateur radio digital communications. The SSDigi Modem builds upon the concepts and codebase of ARDOP to provide a more flexible and user-friendly experience.
 
 ## License
