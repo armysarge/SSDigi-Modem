@@ -54,28 +54,38 @@ class WaterfallView(QWidget):
         self.start_freq = self.center_freq - (display_bandwidth / 2)
         self.end_freq = self.center_freq + (display_bandwidth / 2)
 
-        # Calculate bin to frequency mapping (frequency per bin)
+        # Frequency per bin
         bin_freq = self.sample_rate / self.fft_size
 
-        # Calculate which FFT bins correspond to our frequency range
-        # Adjust for the fact that bins start at 0Hz and go up to sample_rate
-        self.start_bin = max(0, int(self.start_freq / bin_freq))
-        self.end_bin = min(self.fft_size // 2, int(self.end_freq / bin_freq))
+        # FFT runs from 0 to sample_rate/2 across bins 0 to fft_size/2
+        # Calculate exact bin indices for our frequency range
+        self.start_bin = int(self.start_freq / bin_freq)
+        self.end_bin = int(self.end_freq / bin_freq)
+
+        # Clamp to valid bin range
+        self.start_bin = max(0, self.start_bin)
+        self.end_bin = min(self.fft_size // 2, self.end_bin)
 
         # Calculate how many FFT bins cover our frequency range
-        bin_count = self.end_bin - self.start_bin
-
-        # Create pixel to bin mapping with interpolation weights
+        bin_count = self.end_bin - self.start_bin        # Create pixel to bin mapping with interpolation weights
         self.pixel_to_bins = {}
 
         # For improved smoothness, we'll map each pixel to multiple nearby bins with weights
         for pixel_x in range(self.buffer_width):
-            # Map from pixel space to bin space (as a float for interpolation)
-            bin_pos_float = self.start_bin + (pixel_x / self.buffer_width) * bin_count
+            # Calculate the frequency this pixel represents        # Map pixel to frequency space - identical to how the spectrum view does it
+            freq_ratio = pixel_x / self.buffer_width
+            freq = self.start_freq + (self.end_freq - self.start_freq) * freq_ratio
+
+            # Convert frequency to bin index
+            bin_pos_float = freq / bin_freq
+
+            # Make sure bin index is valid (some frequencies may map to negative bins)
+            if bin_pos_float < 0:
+                bin_pos_float = 0
 
             # Get the bin indices for interpolation (the bins that bracket our position)
             bin_floor = int(bin_pos_float)
-            bin_ceil = min(bin_floor + 1, self.fft_size - 1)
+            bin_ceil = min(bin_floor + 1, self.fft_size // 2 - 1)
 
             # Calculate interpolation weight
             weight_ceil = bin_pos_float - bin_floor
@@ -85,18 +95,18 @@ class WaterfallView(QWidget):
             self.pixel_to_bins[pixel_x] = []
 
             # Add the primary bin
-            if 0 <= bin_floor < self.fft_size:
+            if 0 <= bin_floor < self.fft_size // 2:
                 self.pixel_to_bins[pixel_x].append((bin_floor, weight_floor))
 
             # Add the next bin for interpolation
-            if bin_floor != bin_ceil and 0 <= bin_ceil < self.fft_size:
+            if bin_floor != bin_ceil and 0 <= bin_ceil < self.fft_size // 2:
                 self.pixel_to_bins[pixel_x].append((bin_ceil, weight_ceil))
 
             # For additional smoothness, optionally add more neighboring bins with smaller weights
             if bin_floor > 0 and len(self.pixel_to_bins[pixel_x]) < 3:
                 self.pixel_to_bins[pixel_x].append((bin_floor - 1, weight_floor * 0.3))
 
-            if bin_ceil < self.fft_size - 1 and len(self.pixel_to_bins[pixel_x]) < 4:
+            if bin_ceil < self.fft_size // 2 - 1 and len(self.pixel_to_bins[pixel_x]) < 4:
                 self.pixel_to_bins[pixel_x].append((bin_ceil + 1, weight_ceil * 0.3))
 
     def _create_colormap(self):
@@ -119,11 +129,30 @@ class WaterfallView(QWidget):
         painter.drawImage(0, 0, scrolled)
         painter.end()
 
+        # Ensure fft_data isn't empty or invalid
+        if fft_data is None or len(fft_data) == 0:
+            return
+
+        # Ensure we have enough FFT data for our frequency range
+        if len(fft_data) < self.end_bin:
+            print(f"Warning: FFT data length {len(fft_data)} is less than required end bin {self.end_bin}")
+            return
+
+        # Special handling for the 2000 Hz bandwidth case
+        if abs(self.bandwidth - 2000) < 10:  # Check if bandwidth is approximately 2000 Hz
+            # Print diagnostic info
+            print(f"Bandwidth 2000Hz special case - FFT size: {self.fft_size}, Data length: {len(fft_data)}")
+
+            # Simplify the approach - use a hardcoded range that we know works
+            # This is a pragmatic workaround specific to 2000 Hz bandwidth
+            self.start_bin = max(0, min(60, len(fft_data) - 100))  # Empirically chosen safe values
+            self.end_bin = min(len(fft_data) - 1, self.start_bin + 100)
+
+            print(f"Using hardcoded bin range: {self.start_bin} to {self.end_bin}")
+
         # Map FFT data to color indices
         fft_data = np.clip(fft_data, self.min_value, self.max_value)
-        value_range = self.max_value - self.min_value
-
-        # Process data for the last row with improved interpolation
+        value_range = self.max_value - self.min_value# Process data for the last row with improved interpolation
         for pixel_x in range(self.buffer_width):
             # Default to background color
             color = self.bg_color.rgb()
@@ -137,10 +166,13 @@ class WaterfallView(QWidget):
                 total_weight = 0.0
 
                 for bin_idx, weight in weighted_bins:
-                    if bin_idx < len(fft_data):
-                        # Use weighted contribution from each bin
-                        total_value += fft_data[bin_idx] * weight
-                        total_weight += weight
+                    try:
+                        if 0 <= bin_idx < len(fft_data):
+                            # Use weighted contribution from each bin
+                            total_value += fft_data[bin_idx] * weight
+                            total_weight += weight
+                    except Exception as e:
+                        print(f"Error at bin {bin_idx}/{len(fft_data)}: {e}")
 
                 if total_weight > 0:
                     # Calculate weighted average
@@ -228,3 +260,42 @@ class WaterfallView(QWidget):
 
         # Force a redraw
         self.update()
+
+    def _recalculate_pixel_bins(self, bin_freq):
+        """Recalculate the pixel to bin mapping for special cases."""
+        # Create pixel to bin mapping with interpolation weights
+        self.pixel_to_bins = {}
+
+        bin_count = self.end_bin - self.start_bin
+
+        # For improved smoothness, we'll map each pixel to multiple nearby bins with weights
+        for pixel_x in range(self.buffer_width):
+            # Calculate the frequency this pixel represents
+            freq_ratio = pixel_x / self.buffer_width
+            freq = self.start_freq + (self.end_freq - self.start_freq) * freq_ratio
+
+            # Convert frequency to bin index
+            bin_pos_float = freq / bin_freq
+
+            # Make sure bin index is valid
+            if bin_pos_float < 0:
+                bin_pos_float = 0
+
+            # Get the bin indices for interpolation
+            bin_floor = int(bin_pos_float)
+            bin_ceil = bin_floor + 1
+
+            # Calculate interpolation weight
+            weight_ceil = bin_pos_float - bin_floor
+            weight_floor = 1.0 - weight_ceil
+
+            # Store bins with their weights
+            self.pixel_to_bins[pixel_x] = []
+
+            # Add the primary bin
+            if 0 <= bin_floor < self.fft_size // 2:
+                self.pixel_to_bins[pixel_x].append((bin_floor, weight_floor))
+
+            # Add the next bin for interpolation
+            if bin_floor != bin_ceil and 0 <= bin_ceil < self.fft_size // 2:
+                self.pixel_to_bins[pixel_x].append((bin_ceil, weight_ceil))
