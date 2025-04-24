@@ -49,12 +49,6 @@
 After installing dependencies (see Installation), you can run the app with:
 
 ```pwsh
-python rn-modem.py
-```
-
-or, if your main entry point is `run_modem.py`:
-
-```pwsh
 python run_modem.py
 ```
 
