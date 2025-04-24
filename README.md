@@ -34,7 +34,7 @@
 
 ### Progress Screenshot
 
-![Progress Screenshot](https://raw.githubusercontent.com/armysarge/ssdigi-modem/progress.webp)
+![Progress Screenshot](progress.webp)
 
 ## Installation
 
