@@ -10,8 +10,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![GitHub issues](https://img.shields.io/github/issues/armysarge/ssdigi-modem)](https://github.com/armysarge/ssdigi-modem/issues)
 
-<div align="center">
-
 # SSDigi Modem
 
  SSDigi Modem is a software modem for amateur radio digital communications. It provides a flexible platform for transmitting and receiving digital data over radio frequencies with various modulation schemes. Supports Windows, Linux, and MacOS.
