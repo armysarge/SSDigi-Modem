@@ -4,7 +4,6 @@
 
 [![Python 3.6+](https://img.shields.io/badge/python-3.6%2B-blue.svg)](https://www.python.org/downloads/release/python-360/)
 [![PyQt5](https://img.shields.io/badge/PyQt5-5.15.4-blue.svg)](https://pypi.org/project/PyQt5/)
-[![NumPy](https://img.shields.io/badge/NumPy-1.19.2-blue.svg)](https://numpy.org/install/)
 [![SoundDevice](https://img.shields.io/badge/SoundDevice-0.4.1-blue.svg)](https://pypi.org/project/sounddevice/)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
