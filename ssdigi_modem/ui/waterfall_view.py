@@ -54,10 +54,13 @@ class WaterfallView(QWidget):
         self.start_freq = self.center_freq - (display_bandwidth / 2)
         self.end_freq = self.center_freq + (display_bandwidth / 2)
 
-        # Calculate bin to frequency mapping
+        # Calculate bin to frequency mapping (frequency per bin)
         bin_freq = self.sample_rate / self.fft_size
+
+        # Calculate which FFT bins correspond to our frequency range
+        # Adjust for the fact that bins start at 0Hz and go up to sample_rate
         self.start_bin = max(0, int(self.start_freq / bin_freq))
-        self.end_bin = min(self.fft_size, int(self.end_freq / bin_freq))
+        self.end_bin = min(self.fft_size // 2, int(self.end_freq / bin_freq))
 
         # Calculate how many FFT bins cover our frequency range
         bin_count = self.end_bin - self.start_bin

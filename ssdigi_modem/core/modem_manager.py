@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ModemManager:
     """ARDOP modem management for SSDigi Modem"""
+
     def __init__(self, config, hamlib_manager=None):
         """Initialize modem manager"""
         self.config = config
@@ -24,6 +25,7 @@ class ModemManager:
         self.connected = False
         self.ardop_process = None
         self.fft_data = np.zeros(config.get('ui', 'fft_size') // 2)
+        self.simulation_mode = config.get('modem', 'simulation_mode', False)
 
         # Communication settings
         self.mode = config.get('modem', 'mode')

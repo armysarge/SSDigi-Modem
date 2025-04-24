@@ -14,6 +14,8 @@
 
  SSDigi Modem is a software modem for amateur radio digital communications. It provides a flexible platform for transmitting and receiving digital data over radio frequencies with various modulation schemes. Supports Windows, Linux, and MacOS.
 
+ CURRENTLY BROKEN: This project is currently in development and may not be fully functional. Please check the issues page for known problems and updates.
+
 ## Features
 
 - **Spectrum Analyzer**: Real-time visualization of frequency spectrum with configurable display range
@@ -21,6 +23,18 @@
 - **Configurable Bandwidth**: Adjustable signal bandwidth with visual indicators
 - **Frequency Selection**: Interactive frequency selection directly from the spectrum display
 - **Audio Processing**: Direct interface with sound card input/output for signal processing
+- **Cross-Platform**: Compatible with Windows, Linux, and MacOS
+- **Native ARDOP Binaries**: Includes native ARDOP binaries for Windows and Linux platforms
+- **Easy Packaging**: Automated packaging script for building and distributing the application
+
+### Current Supported Modulation Schemes
+
+- ARDOP (Amateur Radio Digital Open Protocol)
+(other schemes may be added in the future)
+
+### Progress Screenshot
+
+![Progress Screenshot](https://raw.githubusercontent.com/armysarge/ssdigi-modem/progress.webp)
 
 ## Installation
 
