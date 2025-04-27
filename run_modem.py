@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Launcher script for SS-Ham-Modem application
+Launcher script for SSDigi-Modem application
 """
 import os
 import sys

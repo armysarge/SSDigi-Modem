@@ -52,12 +52,30 @@ class SettingsDialog(QDialog):
         QTimer.singleShot(100, init_settings)
     
     def _center_dialog(self):
-        """Center the dialog on screen"""
-        screen = QApplication.primaryScreen().geometry()
-        window_geometry = self.frameGeometry()
-        cp = screen.center()
-        window_geometry.moveCenter(cp)
-        self.move(window_geometry.topLeft())
+        """Center the dialog on screen in a cross-platform compatible way"""
+        try:
+            # Get the desktop widget which represents the whole screen
+            desktop = QApplication.desktop()
+            if desktop:
+                # Get the screen geometry
+                screen_geometry = desktop.screenGeometry()
+                # Calculate center position
+                x = (screen_geometry.width() - self.width()) // 2
+                y = (screen_geometry.height() - self.height()) // 2
+                # Move window
+                self.move(x, y)
+            else:
+                # Fallback for newer Qt versions
+                screen = QApplication.primaryScreen()
+                if screen:
+                    screen_geometry = screen.availableGeometry()
+                    x = (screen_geometry.width() - self.width()) // 2
+                    y = (screen_geometry.height() - self.height()) // 2
+                    self.move(x, y)
+        except Exception as e:
+            logger.warning(f"Could not center window: {e}")
+            # If all else fails, at least try to position near the middle
+            self.move(100, 100)
     def _create_ui(self):
         """Create and set up the UI"""
         # Create main layout
@@ -73,7 +91,7 @@ class SettingsDialog(QDialog):
         self.tree_widget.setMinimumWidth(200)
         self.tree_widget.setMaximumWidth(250)
         
-        # Style the tree widget to look like Registry Editor        # Modern tree widget styling
+        # Style the tree widget to look like Registry Editor        # Modern tree widget styling - Linux compatible
         self.tree_widget.setStyleSheet("""
             QTreeWidget {
                 background-color: #f8f9fa;
@@ -82,11 +100,9 @@ class SettingsDialog(QDialog):
                 outline: none;
             }
             QTreeWidget::item {
-                height: 30px;
+                height: 24px;
                 color: #2c3e50;
-                padding-left: 5px;
-                border-radius: 4px;
-                margin: 2px;
+                padding: 2px;
             }
             QTreeWidget::item:selected {
                 background-color: #3498db;
@@ -98,14 +114,6 @@ class SettingsDialog(QDialog):
             QTreeWidget::branch {
                 background: transparent;
             }
-            QTreeWidget::branch:has-children:!has-siblings:closed,
-            QTreeWidget::branch:closed:has-children:has-siblings {
-                image: url(right_arrow.png);
-            }
-            QTreeWidget::branch:open:has-children:!has-siblings,
-            QTreeWidget::branch:open:has-children:has-siblings {
-                image: url(down_arrow.png);
-            }
         """)
         splitter.addWidget(self.tree_widget)
 
@@ -116,8 +124,7 @@ class SettingsDialog(QDialog):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
         # Style the scroll area        # Apply modern styling to all widgets
-        self.setStyleSheet("""
-            QDialog {
+        self.setStyleSheet("""            QDialog {
                 background-color: #ffffff;
             }
             QScrollArea {
@@ -129,35 +136,35 @@ class SettingsDialog(QDialog):
             }
             QGroupBox {
                 border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 1.5ex;
-                font-weight: 500;
+                border-radius: 4px;
+                margin-top: 1.2em;
                 background-color: #ffffff;
-                padding: 12px;
+                padding: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                left: 8px;
-                padding: 0 5px;
+                left: 7px;
+                padding: 0 4px;
                 color: #2c3e50;
-            }            
-            QComboBox {
+            }            QComboBox {
                 border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                padding: 2px 5px;
-                min-height: 16px;
+                border-radius: 3px;
+                padding: 1px 3px;
+                min-height: 20px;
                 background-color: #ffffff;
-                font-size: 9pt;
+                selection-background-color: #3498db;
             }
             QComboBox::drop-down {
-                border: none;
-                width: 16px;
+                border-left: 1px solid #e0e0e0;
+                width: 20px;
+                background: transparent;
             }
             QComboBox::down-arrow {
-                image: url(down_arrow.png);
-                width: 10px;
-                height: 10px;
+                background: #666;
+                width: 8px;
+                height: 2px;
+                margin-top: -2px;
             }
             QSpinBox, QDoubleSpinBox {
                 border: 1px solid #e0e0e0;
@@ -265,29 +272,34 @@ class SettingsDialog(QDialog):
         self._create_ardop_advanced_page()
         self._create_station_page()
         self._create_hamlib_page()
-        self._create_display_page()
-
-        # Set up dialog buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
-        button_box.accepted.connect(self.accept)
+        self._create_display_page()        # Set up dialog buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
         button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._apply_settings)        # Style the dialog buttons
+        apply_button = button_box.button(QDialogButtonBox.Apply)
+        apply_button.clicked.connect(self._on_apply_clicked)# Style the dialog buttons
         button_box.setStyleSheet("""
             QDialogButtonBox {
                 button-layout: stretch;
+            }            QPushButton {
+                min-width: 80px;
+                padding: 4px 12px;
+                margin: 0 4px;
+                border-radius: 3px;
+                border: none;
+                background-color: #e9ecef;
+                color: #2c3e50;
             }
-            QPushButton {
-                min-width: 100px;
-                padding: 8px 20px;
-                margin: 0 5px;
-                border-radius: 4px;
-                font-weight: 500;
+            QPushButton:hover {
+                background-color: #dee2e6;
             }
-            QPushButton[text="OK"] {
+            QPushButton:pressed {
+                background-color: #ced4da;
+            }
+            QPushButton[text="Apply"] {
                 background-color: #2ecc71;
                 color: white;
             }
-            QPushButton[text="OK"]:hover {
+            QPushButton[text="Apply"]:hover {
                 background-color: #27ae60;
             }
             QPushButton[text="Cancel"] {
@@ -296,13 +308,6 @@ class SettingsDialog(QDialog):
             }
             QPushButton[text="Cancel"]:hover {
                 background-color: #c0392b;
-            }
-            QPushButton[text="Apply"] {
-                background-color: #3498db;
-                color: white;
-            }
-            QPushButton[text="Apply"]:hover {
-                background-color: #2980b9;
             }
         """)
         main_layout.addWidget(button_box)
@@ -1392,11 +1397,23 @@ class SettingsDialog(QDialog):
             return False
 
     @pyqtSlot()
-    def accept(self):
-        """Handle OK button"""
-        self._apply_settings()
-        super().accept()
-
+    def _on_apply_clicked(self):
+        """Handle Apply button click - save settings but keep dialog open"""
+        if self._apply_settings():
+            # Show brief success message
+            QMessageBox.information(self, "Settings Saved", "Settings have been applied successfully.")
+            
+    @pyqtSlot()
+    def reject(self):
+        """Handle Cancel button"""
+        # Ask for confirmation if settings were changed
+        reply = QMessageBox.question(self, 'Close Settings',
+                                   'Are you sure you want to close the settings window?\n'
+                                   'Any unapplied changes will be lost.',
+                                   QMessageBox.Yes | QMessageBox.No,
+                                   QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            super().reject()
     @pyqtSlot()
     def _ptt_on(self):
         """Test PTT ON"""
