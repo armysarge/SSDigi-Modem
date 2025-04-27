@@ -69,19 +69,24 @@ class ArdopModem(BaseModem):
             return False
 
         try:
-            logger.debug(f"Using bandwidth: {self.bandwidth} Hz")
+            logger.debug(f"Using bandwidth: {self.bandwidth} Hz")            # Check if we're using external ARDOP
+            if self.config.get('modem', 'ardop_mode', 'internal') == 'external':
+                logger.info("Using external ARDOP mode")
+                # Skip binary check and audio device configuration
+                if not self._connect_to_ardop_sockets():
+                    return False
+            else:
+                # Check if we have a valid ARDOP binary for internal mode
+                if not self.ardop_path or not os.path.exists(self.ardop_path):
+                    logger.error(f"ARDOP binary not found at {self.ardop_path}")
+                    return False
 
-            # Check if we have a valid ARDOP binary
-            if not self.ardop_path or not os.path.exists(self.ardop_path):
-                logger.error(f"ARDOP binary not found at {self.ardop_path}")
-                return False
+                # Configure using actual ARDOP audio devices before connecting
+                self.configure_from_ardop_devices()
 
-            # Configure using actual ARDOP audio devices before connecting
-            self.configure_from_ardop_devices()
-
-            # Start ARDOP process
-            if not self._start_ardop_process():
-                return False
+                # Start ARDOP process
+                if not self._start_ardop_process():
+                    return False
 
             # Start communication thread
             self.comm_thread_running = True
@@ -473,11 +478,16 @@ class ArdopModem(BaseModem):
 
             # If we got here, no binary was found
             logger.error("ARDOP binary not found in any location")
-            return None
-
+            return None    
+    
     def _start_ardop_process(self):
         """Start the ARDOP binary as a separate process with appropriate parameters"""
         try:
+            # Check if we're using external ARDOP
+            if self.config.get('modem', 'ardop_mode', 'internal') == 'external':
+                logger.info("Using external ARDOP - skipping local ARDOP process start")
+                return True
+
             # Get path to the pre-built ARDOP binary
             if not self.ardop_path or not os.path.exists(self.ardop_path):
                 logger.error(f"ARDOP binary not found at {self.ardop_path}")
@@ -635,19 +645,32 @@ class ArdopModem(BaseModem):
 
         except Exception as e:
             logger.exception(f"Error starting ARDOP process: {e}")
-            return False
-
+            return False    
+    
     def _connect_to_ardop_sockets(self):
         """Connect to ARDOP's command and data TCP sockets"""
         import socket
         try:
-            # Connect to command socket (default port 8515)
-            self.cmd_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.cmd_socket.connect(("127.0.0.1", self.cmd_port))
+            # Get connection details based on mode
+            ardop_mode = self.config.get('modem', 'ardop_mode', 'internal')
+            if ardop_mode == 'external':
+                host = self.config.get('modem', 'ardop_ip', '127.0.0.1')
+                port = self.config.get('modem', 'ardop_port', 8515)
+                logger.info(f"Connecting to external ARDOP at {host}:{port}")
+            else:
+                host = '127.0.0.1'
+                port = self.cmd_port
+                logger.info(f"Connecting to local ARDOP at {host}:{port}")
 
-            # Connect to data socket (default port 8516)
+            # Connect to command socket
+            self.cmd_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.cmd_socket.connect((host, port))            # Connect to data socket (default port is command_port + 1)
             self.data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.data_socket.connect(("127.0.0.1", self.data_port))
+            if ardop_mode == 'external':
+                data_port = port + 1
+            else:
+                data_port = self.data_port
+            self.data_socket.connect((host, data_port))
 
             # Start thread to read from command socket
             self.cmd_thread_running = True

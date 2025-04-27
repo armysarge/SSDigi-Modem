@@ -20,6 +20,7 @@ wheels/
 *.egg
 *.spec
 *.dat
+bin/
 
 # PyInstaller build artifacts
 build/

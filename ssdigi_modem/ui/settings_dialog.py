@@ -161,11 +161,35 @@ class SettingsDialog(QDialog):
         comm_layout.addRow("Center Frequency:", self.center_freq_spin)
 
         comm_group.setLayout(comm_layout)
-        layout.addWidget(comm_group)
-
-        # ARDOP specific settings
+        layout.addWidget(comm_group)        # ARDOP specific settings
         self.ardop_group = QGroupBox("ARDOP Settings")
         ardop_layout = QFormLayout()
+
+        # Internal/External ARDOP mode
+        self.run_ardop_mode_combo = QComboBox()
+        self.run_ardop_mode_combo.addItem("Run ARDOP Internally", "internal")
+        self.run_ardop_mode_combo.addItem("Use External ARDOP", "external")
+        self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
+        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)
+
+        # Network settings group
+        self.network_group = QWidget()
+        network_layout = QFormLayout(self.network_group)
+
+        # IP Address
+        self.ardop_ip_edit = QLineEdit()
+        self.ardop_ip_edit.setPlaceholderText("127.0.0.1")
+        self.ardop_ip_edit.setToolTip("IP address of external ARDOP modem")
+        network_layout.addRow("ARDOP IP:", self.ardop_ip_edit)
+
+        # Port
+        self.ardop_port_spin = QSpinBox()
+        self.ardop_port_spin.setRange(1, 65535)
+        self.ardop_port_spin.setValue(8515)  # Default ARDOP port
+        self.ardop_port_spin.setToolTip("Port number of external ARDOP modem")
+        network_layout.addRow("ARDOP Port:", self.ardop_port_spin)
+
+        ardop_layout.addRow("", self.network_group)
 
         # Protocol Mode (ARQ, FEC, RXO)
         self.protocol_mode_combo = QComboBox()
@@ -470,12 +494,15 @@ class SettingsDialog(QDialog):
         layout.addStretch(1)
 
         # Add to tab widget
-        self.tab_widget.addTab(ui_tab, "Display")    # Network settings tab removed - host application interface settings now hard-coded
-
+        self.tab_widget.addTab(ui_tab, "Display") 
+    
     def _create_ardop_advanced_tab(self):
         """Create advanced ARDOP settings tab"""
         ardop_tab = QWidget()
         layout = QVBoxLayout(ardop_tab)
+
+        # Add tab to widget
+        self.tab_widget.addTab(ardop_tab, "ARDOP Advanced")
 
         # ARQ Settings Group
         arq_group = QGroupBox("ARQ Settings")
@@ -603,7 +630,14 @@ class SettingsDialog(QDialog):
         layout.addStretch(1)
 
         # Add to tab widget
-        self.tab_widget.addTab(ardop_tab, "ARDOP Advanced")
+        self.tab_widget.addTab(ardop_tab, "ARDOP Advanced")    
+    
+    def _on_ardop_mode_changed(self, *args):
+        """Handle ARDOP mode change"""
+        # Enable/disable network settings based on mode
+        is_external = self.run_ardop_mode_combo.currentData() == "external"
+        if hasattr(self, 'network_group'):
+            self.network_group.setEnabled(is_external)
 
     def _browse_log_dir(self):
         """Browse for log directory"""
@@ -834,9 +868,19 @@ class SettingsDialog(QDialog):
 
             # Debug Settings
             self.debug_log_check.setChecked(self.config.get('modem', 'debug_log', False))
-            self.log_dir_edit.setText(self.config.get('modem', 'log_dir', ''))
-            self.log_level_spin.setValue(self.config.get('modem', 'log_level', 6))
+            self.log_dir_edit.setText(self.config.get('modem', 'log_dir', ''))         
             self.cmd_trace_check.setChecked(self.config.get('modem', 'cmd_trace', False))
+
+            # Load network settings
+            ardop_mode = self.config.get('modem', 'ardop_mode', 'internal')
+            self.run_ardop_mode_combo.setCurrentIndex(
+                0 if ardop_mode == 'internal' else 1
+            )
+            self.ardop_ip_edit.setText(self.config.get('modem', 'ardop_ip', '127.0.0.1'))
+            self.ardop_port_spin.setValue(self.config.get('modem', 'ardop_port', 8515))
+            
+            # Update network settings enabled state
+            self._on_ardop_mode_changed()
 
         except Exception as e:
             logger.exception(f"Error loading settings: {e}")
@@ -900,9 +944,7 @@ class SettingsDialog(QDialog):
             # Apply display settings
             self.config.set('ui', 'show_freq_markers', self.show_freq_check.isChecked())
             self.config.set('ui', 'show_grid', self.show_grid_check.isChecked())
-            self.config.set('ui', 'fft_average', self.average_check.isChecked())
-
-            # Apply user settings
+            self.config.set('ui', 'fft_average', self.average_check.isChecked())            # Apply user settings
             self.config.set('user', 'callsign', self.callsign_edit.text().upper())
 
             # Save new user fields
@@ -910,6 +952,11 @@ class SettingsDialog(QDialog):
             self.config.set('user', 'email', self.email_edit.text())
             self.config.set('user', 'city', self.city_edit.text())
             self.config.set('user', 'grid_square', self.grid_square_edit.text())
+
+            # Save ARDOP network settings
+            self.config.set('modem', 'ardop_mode', self.run_ardop_mode_combo.currentData())
+            self.config.set('modem', 'ardop_ip', self.ardop_ip_edit.text())
+            self.config.set('modem', 'ardop_port', self.ardop_port_spin.value())
 
             # Save config
             self.config.save()
