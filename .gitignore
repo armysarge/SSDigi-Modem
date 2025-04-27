@@ -21,6 +21,7 @@ wheels/
 *.spec
 *.dat
 bin/
+.venv/
 
 # PyInstaller build artifacts
 build/
