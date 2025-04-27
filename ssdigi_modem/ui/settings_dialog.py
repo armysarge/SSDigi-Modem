@@ -172,9 +172,8 @@ class SettingsDialog(QDialog):
         self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
         ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)
 
-        # Network settings group
-        self.network_group = QWidget()
-        network_layout = QFormLayout(self.network_group)
+        # Network settings group        self.network_group = QGroupBox("Network Settings")
+        network_layout = QFormLayout()
 
         # IP Address
         self.ardop_ip_edit = QLineEdit()
@@ -189,7 +188,8 @@ class SettingsDialog(QDialog):
         self.ardop_port_spin.setToolTip("Port number of external ARDOP modem")
         network_layout.addRow("ARDOP Port:", self.ardop_port_spin)
 
-        ardop_layout.addRow("", self.network_group)
+        self.network_group.setLayout(network_layout)
+        ardop_layout.addWidget(self.network_group)
 
         # Protocol Mode (ARQ, FEC, RXO)
         self.protocol_mode_combo = QComboBox()
