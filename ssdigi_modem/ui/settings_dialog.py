@@ -7,8 +7,10 @@ from PyQt5.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout,
                             QLabel, QPushButton, QComboBox, QCheckBox,
                             QSpinBox, QDoubleSpinBox, QLineEdit, QGroupBox,
                             QFormLayout, QFileDialog, QDialogButtonBox,
-                            QMessageBox, QSlider, QWidget)
-from PyQt5.QtCore import Qt, pyqtSlot
+                            QMessageBox, QSlider, QWidget, QApplication,
+                            QSizePolicy)
+import sys
+from PyQt5.QtCore import Qt, pyqtSlot, QTimer
 from PyQt5.QtGui import QIcon
 from ssdigi_modem.utils.ui_helpers import get_app_icon
 from ssdigi_modem.core.audio_manager import AudioManager
@@ -18,18 +20,76 @@ logger = logging.getLogger(__name__)
 from ssdigi_modem.core.audio_manager import AudioManager
 
 class SettingsDialog(QDialog):
-    """Settings dialog for SSDigi Modem application"""
-
+    """Settings dialog for SSDigi Modem application"""    
     def __init__(self, config, parent=None):
         """Initialize settings dialog"""
         super().__init__(parent)
-
-        self.config = config        # Create UI
+        self.config = config
+        self.initialized = False
+        
+        # Set window properties
         self.setWindowTitle("SSDigi Modem Settings")
-        self.setMinimumSize(700, 500)  # Set minimum size instead of fixed
+        self.setMinimumSize(800, 600)
+        
+        # Create the UI
+        self._create_ui()
+        
+        # Schedule initialization for after the event loop starts
+        QTimer.singleShot(100, self._refresh_audio_devices)
+        QTimer.singleShot(200, self._load_settings)    
+        
+        # Set window properties
+        self.setWindowTitle("SSDigi Modem Settings")
+        self.setMinimumSize(800, 600)
+        
+        # Create the UI first
+        self._create_ui()
+        
+        # Center window
+        self._center_dialog()
+        
+        # Schedule settings initialization
+        def init_settings():
+            self._refresh_audio_devices()
+            self._load_settings()
+            
+        QTimer.singleShot(100, init_settings)
+    
+    def _center_dialog(self):
+        """Center the dialog on screen"""
+        screen = QApplication.primaryScreen().geometry()
+        window_geometry = self.frameGeometry()
+        cp = screen.center()
+        window_geometry.moveCenter(cp)
+        self.move(window_geometry.topLeft())
+    def _create_ui(self):
+        """Create and set up the UI"""        # Create main layout
+        main_layout = QVBoxLayout(self)
 
-        # Prevent window resizing
-        self.setWindowFlags(self.windowFlags() | Qt.MSWindowsFixedSizeDialogHint)
+        # Create tab widget first
+        self.tab_widget = QTabWidget()
+        main_layout.addWidget(self.tab_widget)
+
+        # Create tabs in order
+        self._create_audio_tab()
+        self._create_modem_tab()
+        self._create_station_tab()
+        self._create_hamlib_tab()
+        self._create_ui_tab()
+        self._create_ardop_advanced_tab()
+
+        # Set up dialog buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._apply_settings)
+        main_layout.addWidget(button_box)
+
+        # Set window sizing - after UI is created
+        if not sys.platform.startswith('win'):
+            self.resize(900, 700)
+        else:
+            self.setWindowFlags(self.windowFlags() | Qt.MSWindowsFixedSizeDialogHint)
 
         # Set application icon
         try:
@@ -38,46 +98,34 @@ class SettingsDialog(QDialog):
                 self.setWindowIcon(QIcon(icon_path))
         except Exception as e:
             logger.warning(f"Could not set window icon: {e}")
-
-        # Create layout
-        main_layout = QVBoxLayout(self)
-
-        # Create tab widget
-        self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)        # Create settings tabs
-        self._create_audio_tab()
-        self._create_modem_tab()
-        self._create_station_tab()
-        self._create_hamlib_tab()
-        self._create_ui_tab()
-        self._create_ardop_advanced_tab()
-
-        # Create dialog buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._apply_settings)
-        main_layout.addWidget(button_box)
-
-        # Load current settings
-        self._load_settings()
-
+        
     def _create_audio_tab(self):
         """Create audio settings tab"""
         audio_tab = QWidget()
+        audio_tab.setObjectName("audio_tab")
         layout = QVBoxLayout(audio_tab)
 
         # Audio device selection
         device_group = QGroupBox("Audio Devices")
         device_layout = QFormLayout()
-
-        # Input device
+        
+        # Create input combo
         self.input_combo = QComboBox()
+        self.input_combo.setObjectName("input_combo")
+        self.input_combo.addItem("System Default", -1)
         device_layout.addRow("Input Device:", self.input_combo)
-
-        # Output device
+        
+        # Create output combo
         self.output_combo = QComboBox()
+        self.output_combo.setObjectName("output_combo")
+        self.output_combo.addItem("System Default", -1)
         device_layout.addRow("Output Device:", self.output_combo)
+        
+        device_group.setLayout(device_layout)
+        layout.addWidget(device_group)
+
+        # Add the tab to the tab widget
+        self.tab_widget.addTab(audio_tab, "Audio")
 
         # Audio parameters
         self.sample_rate_combo = QComboBox()
@@ -130,16 +178,18 @@ class SettingsDialog(QDialog):
         layout.addStretch(1)
 
         # Add to tab widget
-        self.tab_widget.addTab(audio_tab, "Audio")
-
+        
     def _create_modem_tab(self):
         """Create modem settings tab"""
         modem_tab = QWidget()
         layout = QVBoxLayout(modem_tab)
+        layout.setSpacing(10)  # Add more spacing between elements
+        layout.setContentsMargins(10, 10, 10, 10)  # Add margins around the layout
 
         # Communication settings
         comm_group = QGroupBox("Communication Settings")
         comm_layout = QFormLayout()
+        comm_layout.setSpacing(8)  # Add more spacing between form elements
 
         # Mode selection
         self.mode_combo = QComboBox()
@@ -173,11 +223,14 @@ class SettingsDialog(QDialog):
         ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)        # Network settings group
         self.network_group = QGroupBox("Network Settings")
         network_layout = QFormLayout()
+        network_layout.setSpacing(8)  # Add more spacing
+        network_layout.setContentsMargins(10, 10, 10, 10)
 
-        # IP Address
+        # IP Address        
         self.ardop_ip_edit = QLineEdit()
         self.ardop_ip_edit.setPlaceholderText("127.0.0.1")
         self.ardop_ip_edit.setToolTip("IP address of external ARDOP modem")
+        self.ardop_ip_edit.setMinimumWidth(200)  # Ensure the field is wide enough
         network_layout.addRow("ARDOP IP:", self.ardop_ip_edit)
 
         # Port
@@ -643,14 +696,18 @@ class SettingsDialog(QDialog):
         log_dir = QFileDialog.getExistingDirectory(self, "Select Log Directory",
                                                   self.log_dir_edit.text())
         if log_dir:
-            self.log_dir_edit.setText(log_dir)
-
+            self.log_dir_edit.setText(log_dir)    
+    
     def _refresh_audio_devices(self):
         """Refresh available audio devices"""
         try:
-            # Store current selections
-            current_input = self.input_combo.currentData()
-            current_output = self.output_combo.currentData()
+            # Store current selections if possible
+            try:
+                current_input = self.input_combo.currentData()
+                current_output = self.output_combo.currentData()
+            except (RuntimeError, AttributeError):
+                current_input = -1
+                current_output = -1
 
             # Clear existing items
             self.input_combo.clear()
@@ -1003,14 +1060,24 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.exception(f"Error testing PTT: {e}")
             QMessageBox.warning(self, "Error",
-                              f"Failed to test PTT: {str(e)}")
-
+                              f"Failed to test PTT: {str(e)}")    
     def showEvent(self, event):
-        """Override showEvent to refresh audio devices when dialog opens"""
+        """Show event handler - ensure dialog is properly positioned"""
         super().showEvent(event)
-        # Automatically refresh audio devices when dialog is opened
-        self._refresh_audio_devices()
-        logger.info("Settings dialog opened, audio devices refreshed")
+        
+        # Get the screen size and dialog size
+        desktop = QApplication.primaryScreen()
+        if desktop:
+            geom = desktop.geometry()
+            # Ensure dialog fits within screen bounds
+            if geom.width() < self.width():
+                self.resize(geom.width() * 0.9, self.height())
+            if geom.height() < self.height():
+                self.resize(self.width(), geom.height() * 0.9)
+            # Center on screen
+            frame = self.frameGeometry()
+            frame.moveCenter(geom.center())
+            self.move(frame.topLeft())
 
     def _on_mode_changed(self):
         """Handle modem mode change"""
@@ -1055,3 +1122,31 @@ class SettingsDialog(QDialog):
             logger.exception(f"Error resetting modem settings: {e}")
             QMessageBox.warning(self, "Error",
                               f"Failed to reset modem settings: {str(e)}")
+
+    def _initialize_settings(self):
+        """Initialize settings after UI is fully created"""
+        # First refresh audio devices
+        self._refresh_audio_devices()
+        # Then load all settings
+        self._load_settings()
+        # Finally center the window
+        self._center_window()
+
+    def _initialize_ui(self):
+        """Initialize UI components with default values"""
+        try:
+            if hasattr(self, 'sample_rate_combo'):
+                self.sample_rate_combo.setCurrentIndex(0)
+            if hasattr(self, 'channels_combo'):
+                self.channels_combo.setCurrentIndex(0)
+            if hasattr(self, 'input_combo'):
+                self.input_combo.setCurrentIndex(0)
+            if hasattr(self, 'output_combo'):
+                self.output_combo.setCurrentIndex(0)
+                
+            # Now load the actual settings
+            self._load_settings()
+            
+        except Exception as e:
+            logger.exception("Error initializing UI")
+            QMessageBox.warning(self, "Error", f"Failed to initialize settings: {str(e)}")
