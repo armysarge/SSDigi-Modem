@@ -89,145 +89,14 @@ class SettingsDialog(QDialog):
         self.tree_widget = QTreeWidget()
         self.tree_widget.setHeaderHidden(True)
         self.tree_widget.setMinimumWidth(200)
-        self.tree_widget.setMaximumWidth(250)
-        
-        # Style the tree widget to look like Registry Editor        # Modern tree widget styling - Linux compatible
-        self.tree_widget.setStyleSheet("""
-            QTreeWidget {
-                background-color: #f8f9fa;
-                border: none;
-                border-right: 1px solid #e0e0e0;
-                outline: none;
-            }
-            QTreeWidget::item {
-                height: 24px;
-                color: #2c3e50;
-                padding: 2px;
-            }
-            QTreeWidget::item:selected {
-                background-color: #3498db;
-                color: #ffffff;
-            }
-            QTreeWidget::item:hover:!selected {
-                background-color: #e3f2fd;
-            }
-            QTreeWidget::branch {
-                background: transparent;
-            }
-        """)
+        self.tree_widget.setMaximumWidth(250)        # Use default styling
         splitter.addWidget(self.tree_widget)
 
         # Create scroll area for settings
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
-        # Style the scroll area        # Apply modern styling to all widgets
-        self.setStyleSheet("""            QDialog {
-                background-color: #ffffff;
-            }
-            QScrollArea {
-                background-color: #ffffff;
-                border: none;
-            }
-            QWidget {
-                background-color: #ffffff;
-            }
-            QGroupBox {
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                margin-top: 1.2em;
-                background-color: #ffffff;
-                padding: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 7px;
-                padding: 0 4px;
-                color: #2c3e50;
-            }            QComboBox {
-                border: 1px solid #e0e0e0;
-                border-radius: 3px;
-                padding: 1px 3px;
-                min-height: 20px;
-                background-color: #ffffff;
-                selection-background-color: #3498db;
-            }
-            QComboBox::drop-down {
-                border-left: 1px solid #e0e0e0;
-                width: 20px;
-                background: transparent;
-            }
-            QComboBox::down-arrow {
-                background: #666;
-                width: 8px;
-                height: 2px;
-                margin-top: -2px;
-            }
-            QSpinBox, QDoubleSpinBox {
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                padding: 2px 5px;
-                min-height: 16px;
-                font-size: 9pt;
-            }
-            QLineEdit {
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                padding: 2px 5px;
-                min-height: 16px;
-                background-color: #ffffff;
-                font-size: 9pt;
-            }
-            QPushButton {
-                background-color: #2980b9;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 8px 15px;
-                min-width: 80px;
-                outline: none;
-            }
-            QPushButton:hover {
-                background-color: #3498db;
-            }
-            QPushButton:pressed {
-                background-color: #2472a4;
-            }
-            QCheckBox {
-                spacing: 8px;
-            }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border: 2px solid #e0e0e0;
-                border-radius: 3px;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #2980b9;
-                border-color: #2980b9;
-            }
-            QSlider::groove:horizontal {
-                border: 1px solid #e0e0e0;
-                height: 6px;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #2980b9;
-                width: 18px;
-                height: 18px;
-                margin: -6px 0;
-                border-radius: 9px;
-            }
-            QFormLayout {
-                spacing: 12px;
-            }
-            QLabel {
-                color: #2c3e50;
-            }
-        """)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)        # Use default system styling
         
         self.settings_container = QWidget()
         self.settings_layout = QVBoxLayout(self.settings_container)
@@ -276,40 +145,7 @@ class SettingsDialog(QDialog):
         button_box = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
         button_box.rejected.connect(self.reject)
         apply_button = button_box.button(QDialogButtonBox.Apply)
-        apply_button.clicked.connect(self._on_apply_clicked)# Style the dialog buttons
-        button_box.setStyleSheet("""
-            QDialogButtonBox {
-                button-layout: stretch;
-            }            QPushButton {
-                min-width: 80px;
-                padding: 4px 12px;
-                margin: 0 4px;
-                border-radius: 3px;
-                border: none;
-                background-color: #e9ecef;
-                color: #2c3e50;
-            }
-            QPushButton:hover {
-                background-color: #dee2e6;
-            }
-            QPushButton:pressed {
-                background-color: #ced4da;
-            }
-            QPushButton[text="Apply"] {
-                background-color: #2ecc71;
-                color: white;
-            }
-            QPushButton[text="Apply"]:hover {
-                background-color: #27ae60;
-            }
-            QPushButton[text="Cancel"] {
-                background-color: #e74c3c;
-                color: white;
-            }
-            QPushButton[text="Cancel"]:hover {
-                background-color: #c0392b;
-            }
-        """)
+        apply_button.clicked.connect(self._on_apply_clicked)        # Use default system styling for buttons
         main_layout.addWidget(button_box)
 
         # Select first item by default
