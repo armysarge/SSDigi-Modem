@@ -305,7 +305,7 @@ class SettingsDialog(QDialog):
 
     def _create_ardop_page(self):
         """Create ARDOP settings page with basic and advanced settings"""
-        page = self._create_page("ARDOP Settings")
+        page = self._create_page("ARDOP")
         layout = page.layout()
 
         # Basic ARDOP settings group
