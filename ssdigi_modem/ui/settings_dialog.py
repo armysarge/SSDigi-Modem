@@ -170,9 +170,8 @@ class SettingsDialog(QDialog):
         self.run_ardop_mode_combo.addItem("Run ARDOP Internally", "internal")
         self.run_ardop_mode_combo.addItem("Use External ARDOP", "external")
         self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
-        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)
-
-        # Network settings group        self.network_group = QGroupBox("Network Settings")
+        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)        # Network settings group
+        self.network_group = QGroupBox("Network Settings")
         network_layout = QFormLayout()
 
         # IP Address
