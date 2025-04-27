@@ -7,3 +7,4 @@ matplotlib
 pyhamtools
 pyinstaller
 cryptography
+sounddevice

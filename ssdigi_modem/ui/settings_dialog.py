@@ -1,24 +1,24 @@
 """
 Settings dialog for SSDigi Modem
 """
-import logging
 import os
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
-                            QLabel, QPushButton, QComboBox, QCheckBox,
-                            QSpinBox, QDoubleSpinBox, QLineEdit, QGroupBox,
-                            QFormLayout, QFileDialog, QDialogButtonBox,
-                            QMessageBox, QSlider, QWidget, QApplication,
-                            QSizePolicy, QTreeWidget, QTreeWidgetItem,
-                            QSplitter, QScrollArea)
 import sys
-from PyQt5.QtCore import Qt, pyqtSlot, QTimer
+import logging
+import sounddevice as sd
+import serial.tools.list_ports
+from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
+                         QFormLayout, QLabel, QLineEdit, QPushButton, 
+                         QComboBox, QSpinBox, QCheckBox, QGroupBox, 
+                         QTreeWidget, QTreeWidgetItem, QScrollArea, QWidget, 
+                         QMessageBox, QDialogButtonBox, QSlider, QSplitter,
+                         QFileDialog)
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon
 from ssdigi_modem.utils.ui_helpers import get_app_icon
 from ssdigi_modem.core.audio_manager import AudioManager
-import serial.tools.list_ports
 
+# Setup logging
 logger = logging.getLogger(__name__)
-from ssdigi_modem.core.audio_manager import AudioManager
 
 class SettingsDialog(QDialog):
     """Settings dialog for SSDigi Modem application"""    
@@ -29,6 +29,9 @@ class SettingsDialog(QDialog):
         self.initialized = False
         self.current_page = None
         self.pages = {}  # Store created setting pages
+        
+        # Create shared widgets that are used across pages
+        self.network_group = None  
         
         # Set window properties
         self.setWindowTitle("SSDigi Modem Settings")
@@ -76,6 +79,21 @@ class SettingsDialog(QDialog):
             logger.warning(f"Could not center window: {e}")
             # If all else fails, at least try to position near the middle
             self.move(100, 100)
+            
+    def _center_window(self):
+        """Center the window on the screen"""
+        try:
+            screen = QApplication.primaryScreen()
+            if screen:
+                center = screen.availableGeometry().center()
+                geo = self.frameGeometry()
+                geo.moveCenter(center)
+                self.move(geo.topLeft())
+        except Exception as e:
+            logger.warning(f"Could not center window: {e}")
+            # Fallback position
+            self.move(100, 100)
+
     def _create_ui(self):
         """Create and set up the UI"""
         # Create main layout
@@ -89,41 +107,33 @@ class SettingsDialog(QDialog):
         self.tree_widget = QTreeWidget()
         self.tree_widget.setHeaderHidden(True)
         self.tree_widget.setMinimumWidth(200)
-        self.tree_widget.setMaximumWidth(250)        # Use default styling
+        self.tree_widget.setMaximumWidth(250)        
         splitter.addWidget(self.tree_widget)
 
         # Create scroll area for settings
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)        # Use default system styling
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)       
         
         self.settings_container = QWidget()
         self.settings_layout = QVBoxLayout(self.settings_container)
         self.settings_layout.setContentsMargins(10, 10, 10, 10)
         self.settings_layout.setSpacing(10)
         scroll_area.setWidget(self.settings_container)
-        splitter.addWidget(scroll_area)
-
-        # Set up tree items
+        splitter.addWidget(scroll_area)        # Set up tree items
         audio_item = QTreeWidgetItem(["Audio"])
         modem_item = QTreeWidgetItem(["Modem"])
-        ardop_item = QTreeWidgetItem(["ARDOP Settings"])
-        ardop_advanced_item = QTreeWidgetItem(["ARDOP Advanced"])
+        ardop_item = QTreeWidgetItem(["ARDOP"])  # Changed to match page name
         station_item = QTreeWidgetItem(["Station"])
         hamlib_item = QTreeWidgetItem(["HAMLIB"])
-        display_item = QTreeWidgetItem(["Display"])
-
-        # Set icons for tree items (you can add icons later)
-        for item in [audio_item, modem_item, ardop_item, ardop_advanced_item,
+        display_item = QTreeWidgetItem(["Display"])       
+        for item in [audio_item, modem_item, ardop_item,
                     station_item, hamlib_item, display_item]:
-            item.setIcon(0, QIcon())
-
-        # Add items to tree
+            item.setIcon(0, QIcon())        
         self.tree_widget.addTopLevelItem(audio_item)
         self.tree_widget.addTopLevelItem(modem_item)
-        self.tree_widget.addTopLevelItem(ardop_item)
-        modem_item.addChild(ardop_advanced_item)  # Make ARDOP Advanced a child of Modem
+        modem_item.addChild(ardop_item)  # Add ARDOP as child of Modem
         self.tree_widget.addTopLevelItem(station_item)
         self.tree_widget.addTopLevelItem(hamlib_item)
         self.tree_widget.addTopLevelItem(display_item)
@@ -132,20 +142,17 @@ class SettingsDialog(QDialog):
         self.tree_widget.expandAll()
 
         # Connect tree selection changed
-        self.tree_widget.itemClicked.connect(self._on_tree_item_clicked)
-
-        # Create all pages but keep them hidden
+        self.tree_widget.itemClicked.connect(self._on_tree_item_clicked)    
         self._create_audio_page()
         self._create_modem_page()
-        self._create_ardop_page()
-        self._create_ardop_advanced_page()
+        self._create_ardop_page() 
         self._create_station_page()
         self._create_hamlib_page()
-        self._create_display_page()        # Set up dialog buttons
+        self._create_display_page()# Set up dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
         button_box.rejected.connect(self.reject)
         apply_button = button_box.button(QDialogButtonBox.Apply)
-        apply_button.clicked.connect(self._on_apply_clicked)        # Use default system styling for buttons
+        apply_button.clicked.connect(self._on_apply_clicked)        
         main_layout.addWidget(button_box)
 
         # Select first item by default
@@ -290,967 +297,361 @@ class SettingsDialog(QDialog):
         self.center_freq_spin.setRange(500, 3000)
         self.center_freq_spin.setSingleStep(10)
         self.center_freq_spin.setSuffix(" Hz")
-        comm_layout.addRow("Center Frequency:", self.center_freq_spin)
-
+        comm_layout.addRow("Center Frequency:", self.center_freq_spin)        
         comm_group.setLayout(comm_layout)
-        layout.addWidget(comm_group)        # ARDOP specific settings
-        self.ardop_group = QGroupBox("ARDOP Settings")
-        ardop_layout = QFormLayout()
-
-        # Internal/External ARDOP mode
-        self.run_ardop_mode_combo = QComboBox()
-        self.run_ardop_mode_combo.addItem("Run ARDOP Internally", "internal")
-        self.run_ardop_mode_combo.addItem("Use External ARDOP", "external")
-        self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
-        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)        
-        # Network settings group
-        self.network_group = QGroupBox("Network Settings")
-        network_layout = QFormLayout()
-        network_layout.setSpacing(8)  # Add more spacing
-        network_layout.setContentsMargins(10, 10, 10, 10)
-
-        # IP Address        
-        self.ardop_ip_edit = QLineEdit()
-        self.ardop_ip_edit.setPlaceholderText("127.0.0.1")
-        self.ardop_ip_edit.setToolTip("IP address of external ARDOP modem")
-        self.ardop_ip_edit.setMinimumWidth(200)  # Ensure the field is wide enough
-        network_layout.addRow("ARDOP IP:", self.ardop_ip_edit)
-
-        # Port
-        self.ardop_port_spin = QSpinBox()
-        self.ardop_port_spin.setRange(1, 65535)
-        self.ardop_port_spin.setValue(8515)  # Default ARDOP port
-        self.ardop_port_spin.setToolTip("Port number of external ARDOP modem")
-        network_layout.addRow("ARDOP Port:", self.ardop_port_spin)
-
-        self.network_group.setLayout(network_layout)
-        ardop_layout.addWidget(self.network_group)
-
-        # Protocol Mode (ARQ, FEC, RXO)
-        self.protocol_mode_combo = QComboBox()
-        self.protocol_mode_combo.addItem("ARQ Mode", "ARQ")
-        self.protocol_mode_combo.addItem("FEC Mode", "FEC")
-        self.protocol_mode_combo.addItem("Receive Only", "RXO")
-        self.protocol_mode_combo.setToolTip("ARQ: Automatic Repeat Request - Connection mode\n"
-                                          "FEC: Forward Error Correction - Broadcast mode\n"
-                                          "RXO: Receive Only - No transmit")
-        ardop_layout.addRow("Protocol Mode:", self.protocol_mode_combo)
-
-        # ARQ timeout
-        self.arq_timeout_spin = QSpinBox()
-        self.arq_timeout_spin.setRange(30, 240)
-        self.arq_timeout_spin.setSingleStep(10)
-        self.arq_timeout_spin.setSuffix(" sec")
-        self.arq_timeout_spin.setToolTip("Time before ARQ connection times out if idle")
-        ardop_layout.addRow("ARQ Timeout:", self.arq_timeout_spin)
-
-        # FEC repeat settings
-        self.fec_repeats_spin = QSpinBox()
-        self.fec_repeats_spin.setRange(0, 5)
-        self.fec_repeats_spin.setToolTip("Number of times to repeat FEC transmissions (0-5)")
-        ardop_layout.addRow("FEC Repeats:", self.fec_repeats_spin)
-
-        # Leader length
-        self.leader_spin = QSpinBox()
-        self.leader_spin.setRange(120, 2500)
-        self.leader_spin.setSingleStep(10)
-        self.leader_spin.setSuffix(" ms")
-        self.leader_spin.setToolTip("Sync leader length in milliseconds (120-2500)")
-        ardop_layout.addRow("Leader Length:", self.leader_spin)
-
-        # Trailer length
-        self.trailer_spin = QSpinBox()
-        self.trailer_spin.setRange(0, 200)
-        self.trailer_spin.setSingleStep(5)
-        self.trailer_spin.setSuffix(" ms")
-        self.trailer_spin.setToolTip("Trailer tone length in milliseconds (0-200)")
-        ardop_layout.addRow("Trailer Length:", self.trailer_spin)
-
-        # Squelch level
-        self.squelch_spin = QSpinBox()
-        self.squelch_spin.setRange(1, 10)
-        self.squelch_spin.setToolTip("Squelch level (1-10), lower is more sensitive")
-        ardop_layout.addRow("Squelch:", self.squelch_spin)
-
-        # Busy detection
-        self.busydet_spin = QSpinBox()
-        self.busydet_spin.setRange(0, 9)
-        self.busydet_spin.setToolTip("Busy detection sensitivity (0=most sensitive, 9=least sensitive)")
-        ardop_layout.addRow("Busy Detection:", self.busydet_spin)
-
-        # Extra delay
-        self.extradelay_spin = QSpinBox()
-        self.extradelay_spin.setRange(0, 1000)
-        self.extradelay_spin.setSingleStep(10)
-        self.extradelay_spin.setSuffix(" ms")
-        self.extradelay_spin.setToolTip("Extra delay between RX and TX")
-        ardop_layout.addRow("Extra Delay:", self.extradelay_spin)
-
-        # Console log verbosity
-        self.consolelog_spin = QSpinBox()
-        self.consolelog_spin.setRange(1, 6)
-        self.consolelog_spin.setToolTip("Console log verbosity (1-6, 1=most verbose)")
-        ardop_layout.addRow("CW ID:", self.consolelog_spin)
-
-        # Advanced options
-        self.cwid_check = QCheckBox()
-        self.cwid_check.setToolTip("Send CW ID after IDFRAME")
-        ardop_layout.addRow("CW ID:", self.cwid_check)
-
-        self.fsk_only_check = QCheckBox()
-        self.fsk_only_check.setToolTip("Use only FSK modes (no PSK or QAM)")
-        ardop_layout.addRow("FSK Only:", self.fsk_only_check)
-
-        self.use600_check = QCheckBox()
-        self.use600_check.setToolTip("Enable 600 baud modes for FM/2m")
-        ardop_layout.addRow("Use 600 Baud:", self.use600_check)
-
-        self.faststart_check = QCheckBox()
-        self.faststart_check.setToolTip("Start ARQ with faster speed frames")
-        ardop_layout.addRow("Fast Start:", self.faststart_check)
-
-        # Custom commands
-        self.custom_commands = QLineEdit()
-        self.custom_commands.setToolTip("Additional semicolon-separated ARDOP commands")
-        ardop_layout.addRow("Custom Commands:", self.custom_commands)
-
-        # Add Reset to Defaults button
-        reset_button = QPushButton("Reset to Defaults")
-        reset_button.clicked.connect(self._reset_modem_settings)
-        ardop_layout.addRow("", reset_button)
-
-        self.ardop_group.setLayout(ardop_layout)
-        layout.addWidget(self.ardop_group)        # Placeholder - removed spectrum settings (moved to Display tab)
-
-        # Add stretch
-        layout.addStretch(1)        # Add to settings container
+        layout.addWidget(comm_group)
+          # Add stretch to fill remaining space
         layout.addStretch(1)
-        
+
     def _create_ardop_page(self):
-        """Create ARDOP settings page"""
+        """Create ARDOP settings page with basic and advanced settings"""
         page = self._create_page("ARDOP Settings")
         layout = page.layout()
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
 
-        # ARDOP settings group
-        ardop_group = QGroupBox("ARDOP Mode")
-        ardop_layout = QFormLayout()
-        ardop_layout.setSpacing(8)
+        # Basic ARDOP settings group
+        basic_group = QGroupBox("ARDOP Mode")
+        basic_layout = QFormLayout()
 
         # Internal/External ARDOP mode
         self.run_ardop_mode_combo = QComboBox()
         self.run_ardop_mode_combo.addItem("Run ARDOP Internally", "internal")
         self.run_ardop_mode_combo.addItem("Use External ARDOP", "external")
         self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
-        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)
+        basic_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)
 
-        # Network settings group
-        self.network_group = QGroupBox("Network Settings")
+        # Create network settings group
         network_layout = QFormLayout()
-        network_layout.setSpacing(8)
-        network_layout.setContentsMargins(10, 10, 10, 10)
 
         # IP Address
         self.ardop_ip_edit = QLineEdit()
         self.ardop_ip_edit.setPlaceholderText("127.0.0.1")
         self.ardop_ip_edit.setToolTip("IP address of external ARDOP modem")
-        self.ardop_ip_edit.setMinimumWidth(200)
         network_layout.addRow("ARDOP IP:", self.ardop_ip_edit)
 
         # Port
         self.ardop_port_spin = QSpinBox()
         self.ardop_port_spin.setRange(1, 65535)
         self.ardop_port_spin.setValue(8515)
-        self.ardop_port_spin.setToolTip("Port number of external ARDOP modem")
         network_layout.addRow("ARDOP Port:", self.ardop_port_spin)
 
+        # Create or update network group
+        if not self.network_group:
+            self.network_group = QGroupBox("Network Settings")
         self.network_group.setLayout(network_layout)
-        ardop_layout.addWidget(self.network_group)
+        basic_layout.addWidget(self.network_group)
+        basic_group.setLayout(basic_layout)
+        
+        layout.addWidget(basic_group)
 
-        # Protocol Mode (ARQ, FEC, RXO)
+        # ARQ Settings Group
+        arq_group = QGroupBox("ARQ Settings")
+        arq_layout = QFormLayout()
+
+        # Protocol Mode
         self.protocol_mode_combo = QComboBox()
         self.protocol_mode_combo.addItem("ARQ Mode", "ARQ")
         self.protocol_mode_combo.addItem("FEC Mode", "FEC")
         self.protocol_mode_combo.addItem("Receive Only", "RXO")
-        self.protocol_mode_combo.setToolTip("ARQ: Automatic Repeat Request - Connection mode\n"
-                                          "FEC: Forward Error Correction - Broadcast mode\n"
-                                          "RXO: Receive Only - No transmit")
-        ardop_layout.addRow("Protocol Mode:", self.protocol_mode_combo)
+        arq_layout.addRow("Protocol Mode:", self.protocol_mode_combo)
 
         # ARQ timeout
         self.arq_timeout_spin = QSpinBox()
         self.arq_timeout_spin.setRange(30, 240)
         self.arq_timeout_spin.setSingleStep(10)
         self.arq_timeout_spin.setSuffix(" sec")
-        self.arq_timeout_spin.setToolTip("Time before ARQ connection times out if idle")
-        ardop_layout.addRow("ARQ Timeout:", self.arq_timeout_spin)
+        arq_layout.addRow("ARQ Timeout:", self.arq_timeout_spin)
 
-        # FEC repeat settings
-        self.fec_repeats_spin = QSpinBox()
-        self.fec_repeats_spin.setRange(0, 5)
-        self.fec_repeats_spin.setToolTip("Number of times to repeat FEC transmissions (0-5)")
-        ardop_layout.addRow("FEC Repeats:", self.fec_repeats_spin)
+        arq_group.setLayout(arq_layout)
+        layout.addWidget(arq_group)
+
+        # Timing Settings Group
+        timing_group = QGroupBox("Timing Settings")
+        timing_layout = QFormLayout()
 
         # Leader length
         self.leader_spin = QSpinBox()
         self.leader_spin.setRange(120, 2500)
         self.leader_spin.setSingleStep(10)
         self.leader_spin.setSuffix(" ms")
-        self.leader_spin.setToolTip("Sync leader length in milliseconds (120-2500)")
-        ardop_layout.addRow("Leader Length:", self.leader_spin)
+        timing_layout.addRow("Leader Length:", self.leader_spin)
 
         # Trailer length
         self.trailer_spin = QSpinBox()
         self.trailer_spin.setRange(0, 200)
         self.trailer_spin.setSingleStep(5)
         self.trailer_spin.setSuffix(" ms")
-        self.trailer_spin.setToolTip("Trailer tone length in milliseconds (0-200)")
-        ardop_layout.addRow("Trailer Length:", self.trailer_spin)
+        timing_layout.addRow("Trailer Length:", self.trailer_spin)
 
-        # Squelch level
-        self.squelch_spin = QSpinBox()
-        self.squelch_spin.setRange(1, 10)
-        self.squelch_spin.setToolTip("Squelch level (1-10), lower is more sensitive")
-        ardop_layout.addRow("Squelch:", self.squelch_spin)
+        timing_group.setLayout(timing_layout)
+        layout.addWidget(timing_group)
 
-        # Busy detection
-        self.busydet_spin = QSpinBox()
-        self.busydet_spin.setRange(0, 9)
-        self.busydet_spin.setToolTip("Busy detection sensitivity (0=most sensitive, 9=least sensitive)")
-        ardop_layout.addRow("Busy Detection:", self.busydet_spin)
+        # Operation Settings Group
+        operation_group = QGroupBox("Operation Settings")
+        operation_layout = QFormLayout()
 
-        # Extra delay
-        self.extradelay_spin = QSpinBox()
-        self.extradelay_spin.setRange(0, 1000)
-        self.extradelay_spin.setSingleStep(10)
-        self.extradelay_spin.setSuffix(" ms")
-        self.extradelay_spin.setToolTip("Extra delay between RX and TX")
-        ardop_layout.addRow("Extra Delay:", self.extradelay_spin)
-
-        # Console log verbosity
-        self.consolelog_spin = QSpinBox()
-        self.consolelog_spin.setRange(1, 6)
-        self.consolelog_spin.setToolTip("Console log verbosity (1-6, 1=most verbose)")
-        ardop_layout.addRow("CW ID:", self.consolelog_spin)
-
-        # Advanced options
+        # Basic settings
         self.cwid_check = QCheckBox()
-        self.cwid_check.setToolTip("Send CW ID after IDFRAME")
-        ardop_layout.addRow("CW ID:", self.cwid_check)
+        operation_layout.addRow("CW ID:", self.cwid_check)
 
         self.fsk_only_check = QCheckBox()
-        self.fsk_only_check.setToolTip("Use only FSK modes (no PSK or QAM)")
-        ardop_layout.addRow("FSK Only:", self.fsk_only_check)
+        operation_layout.addRow("FSK Only:", self.fsk_only_check)
 
         self.use600_check = QCheckBox()
-        self.use600_check.setToolTip("Enable 600 baud modes for FM/2m")
-        ardop_layout.addRow("Use 600 Baud:", self.use600_check)
+        operation_layout.addRow("Use 600 Baud:", self.use600_check)
 
-        self.faststart_check = QCheckBox()
-        self.faststart_check.setToolTip("Start ARQ with faster speed frames")
-        ardop_layout.addRow("Fast Start:", self.faststart_check)
+        operation_group.setLayout(operation_layout)
+        layout.addWidget(operation_group)
 
-        # Custom commands
-        self.custom_commands = QLineEdit()
-        self.custom_commands.setToolTip("Additional semicolon-separated ARDOP commands")
-        ardop_layout.addRow("Custom Commands:", self.custom_commands)
+        # Debug Settings Group
+        debug_group = QGroupBox("Debug Settings")
+        debug_layout = QFormLayout()
 
-        # Add Reset to Defaults button
-        reset_button = QPushButton("Reset to Defaults")
-        reset_button.clicked.connect(self._reset_modem_settings)
-        ardop_layout.addRow("", reset_button)
+        self.debug_log_check = QCheckBox()
+        debug_layout.addRow("Debug Log:", self.debug_log_check)
 
-        ardop_group.setLayout(ardop_layout)
-        layout.addWidget(ardop_group)
-        layout.addStretch(1)
+        debug_group.setLayout(debug_layout)
+        layout.addWidget(debug_group)
 
-        # Add to settings container
-        self.settings_layout.addWidget(page)
+        layout.addStretch()
+        return page
 
-    def _create_station_page(self):
-        """Create station settings page"""
-        page = self._create_page("Station")
-        layout = page.layout()
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        # Station details group
-        station_group = QGroupBox("Station Details")
-        station_layout = QFormLayout()
-        station_layout.setSpacing(8)
-
-        self.callsign_edit = QLineEdit()
-        self.callsign_edit.setMaxLength(10)
-        self.callsign_edit.setText(self.config.get('user', 'callsign', '').upper())
-        self.callsign_edit.setToolTip("Callsign is locked by your license")
-        station_layout.addRow("Callsign:", self.callsign_edit)
-
-        self.fullname_edit = QLineEdit()
-        self.fullname_edit.setMaxLength(50)
-        self.fullname_edit.setText(self.config.get('user', 'fullname', ''))
-        self.fullname_edit.setToolTip("Your full name")
-        station_layout.addRow("Full Name:", self.fullname_edit)
-
-        self.email_edit = QLineEdit()
-        self.email_edit.setMaxLength(100)
-        self.email_edit.setText(self.config.get('user', 'email', ''))
-        self.email_edit.setToolTip("Your email address")
-        station_layout.addRow("Email:", self.email_edit)
-
-        self.city_edit = QLineEdit()
-        self.city_edit.setMaxLength(50)
-        self.city_edit.setText(self.config.get('user', 'city', ''))
-        self.city_edit.setToolTip("Your city or location")
-        station_layout.addRow("City:", self.city_edit)
-
-        self.grid_square_edit = QLineEdit()
-        self.grid_square_edit.setMaxLength(6)
-        self.grid_square_edit.setText(self.config.get('user', 'grid_square', ''))
-        self.grid_square_edit.setToolTip("Grid square is the location of your station")
-        station_layout.addRow("Grid Square:", self.grid_square_edit)
-
-        station_group.setLayout(station_layout)
-        layout.addWidget(station_group)
-        layout.addStretch(1)
-
-        # Add to settings container
-        self.settings_layout.addWidget(page)
-        
     def _create_hamlib_page(self):
         """Create HAMLIB settings page"""
         page = self._create_page("HAMLIB")
         layout = page.layout()
 
         # Enable HAMLIB
-        self.hamlib_enabled_check = QCheckBox("Enable HAMLIB Rig Control")
-        layout.addWidget(self.hamlib_enabled_check)
-
-        # HAMLIB settings
-        hamlib_group = QGroupBox("HAMLIB Settings")
+        hamlib_group = QGroupBox("HAMLIB Control")
         hamlib_layout = QFormLayout()
 
+        self.hamlib_enabled_check = QCheckBox()
+        hamlib_layout.addRow("Enable HAMLIB:", self.hamlib_enabled_check)
+
+        # Rig selection
         self.rig_model_combo = QComboBox()
         hamlib_layout.addRow("Rig Model:", self.rig_model_combo)
 
+        # Serial settings
         self.port_edit = QLineEdit()
-        hamlib_layout.addRow("Serial Port:", self.port_edit)
+        port_layout = QHBoxLayout()
+        port_layout.addWidget(self.port_edit)
+        scan_button = QPushButton("Scan")
+        scan_button.clicked.connect(self._scan_serial_ports)
+        port_layout.addWidget(scan_button)
+        hamlib_layout.addRow("Serial Port:", port_layout)
 
         self.baud_combo = QComboBox()
         for baud in [4800, 9600, 19200, 38400, 57600, 115200]:
-            self.baud_combo.addItem(f"{baud}", baud)
+            self.baud_combo.addItem(str(baud))
         hamlib_layout.addRow("Baud Rate:", self.baud_combo)
 
         self.ptt_combo = QComboBox()
-        self.ptt_combo.addItem("VOX", "VOX")
-        self.ptt_combo.addItem("RTS", "RTS")
-        self.ptt_combo.addItem("DTR", "DTR")
-        self.ptt_combo.addItem("CAT", "CAT")
+        self.ptt_combo.addItems(["VOX", "RTS", "DTR", "CAT"])
         hamlib_layout.addRow("PTT Control:", self.ptt_combo)
+
+        # Add test buttons
+        test_layout = QHBoxLayout()
+        ptt_on = QPushButton("Test PTT On")
+        ptt_on.clicked.connect(self._ptt_on)
+        ptt_off = QPushButton("Test PTT Off")
+        ptt_off.clicked.connect(self._ptt_off)
+        test_layout.addWidget(ptt_on)
+        test_layout.addWidget(ptt_off)
+        hamlib_layout.addRow("Test PTT:", test_layout)
 
         hamlib_group.setLayout(hamlib_layout)
         layout.addWidget(hamlib_group)
-
-        # Add stretch
-        layout.addStretch(1)
-
-        # Add to settings container
-        self.settings_layout.addWidget(page)
+        layout.addStretch()
 
     def _create_display_page(self):
         """Create display settings page"""
         page = self._create_page("Display")
         layout = page.layout()
 
-        # UI settings
-        ui_group = QGroupBox("User Interface")
-        ui_layout = QFormLayout()
-
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItem("Default", "default")
-        self.theme_combo.addItem("Dark", "dark")
-        self.theme_combo.addItem("Light", "light")
-        self.theme_combo.addItem("Minimal", "minimal")
-        ui_layout.addRow("Theme:", self.theme_combo)
+        # Waterfall display
+        waterfall_group = QGroupBox("Waterfall Display")
+        waterfall_layout = QFormLayout()
 
         self.waterfall_combo = QComboBox()
-        self.waterfall_combo.addItem("Default", "default")
-        self.waterfall_combo.addItem("Viridis", "viridis")
-        self.waterfall_combo.addItem("Hot", "hot")
-        self.waterfall_combo.addItem("Blue", "blue")
-        ui_layout.addRow("Waterfall Colors:", self.waterfall_combo)
-
-        # FFT size is now fixed - display as a label
-        self.fft_size_label = QLabel("2048 points (Fixed for optimal performance)")
-        ui_layout.addRow("FFT Size:", self.fft_size_label)
+        self.waterfall_combo.addItems(["Default", "Viridis", "Hot", "Blue"])
+        waterfall_layout.addRow("Color Scheme:", self.waterfall_combo)
 
         self.update_rate_spin = QSpinBox()
         self.update_rate_spin.setRange(1, 30)
         self.update_rate_spin.setSuffix(" Hz")
-        ui_layout.addRow("Spectrum Update Rate:", self.update_rate_spin)
+        waterfall_layout.addRow("Update Rate:", self.update_rate_spin)
 
-        ui_group.setLayout(ui_layout)
-        layout.addWidget(ui_group)        # Display settings
-        display_group = QGroupBox("Display Options")
-        display_layout = QFormLayout()
+        waterfall_group.setLayout(waterfall_layout)
+        layout.addWidget(waterfall_group)
 
-        self.show_freq_check = QCheckBox()
-        display_layout.addRow("Show Frequency Markers:", self.show_freq_check)
-
-        self.show_grid_check = QCheckBox()
-        display_layout.addRow("Show Grid:", self.show_grid_check)
-
-        self.average_check = QCheckBox()
-        display_layout.addRow("Average FFT:", self.average_check)
-
-        self.peak_hold_check = QCheckBox()
-        display_layout.addRow("Peak Hold:", self.peak_hold_check)
-
-        display_group.setLayout(display_layout)
-        layout.addWidget(display_group)
-
-        # Spectrum and waterfall settings (moved from Modem tab)
+        # Spectrum display
         spectrum_group = QGroupBox("Spectrum Display")
         spectrum_layout = QFormLayout()
 
-        # FFT averaging settings
+        self.show_freq_check = QCheckBox()
+        spectrum_layout.addRow("Show Frequency Markers:", self.show_freq_check)
+
+        self.show_grid_check = QCheckBox()
+        spectrum_layout.addRow("Show Grid:", self.show_grid_check)
+
         self.fft_avg_spin = QSpinBox()
         self.fft_avg_spin.setRange(1, 10)
-        self.fft_avg_spin.setSingleStep(1)
-        self.fft_avg_spin.setToolTip("Number of FFT frames to average (higher values give smoother spectrum)")
         spectrum_layout.addRow("FFT Averaging:", self.fft_avg_spin)
 
-        # Spectrum scaling
         self.spectrum_ref_spin = QSpinBox()
         self.spectrum_ref_spin.setRange(-120, 0)
-        self.spectrum_ref_spin.setSingleStep(5)
         self.spectrum_ref_spin.setSuffix(" dB")
-        self.spectrum_ref_spin.setToolTip("Reference level for spectrum display")
         spectrum_layout.addRow("Reference Level:", self.spectrum_ref_spin)
 
-        # Spectrum range
         self.spectrum_range_spin = QSpinBox()
         self.spectrum_range_spin.setRange(30, 120)
-        self.spectrum_range_spin.setSingleStep(5)
         self.spectrum_range_spin.setSuffix(" dB")
-        self.spectrum_range_spin.setToolTip("Range of spectrum display")
         spectrum_layout.addRow("Display Range:", self.spectrum_range_spin)
-
-        # Waterfall settings
-        self.waterfall_speed_combo = QComboBox()
-        self.waterfall_speed_combo.addItem("Slow", "slow")
-        self.waterfall_speed_combo.addItem("Medium", "medium")
-        self.waterfall_speed_combo.addItem("Fast", "fast")
-        spectrum_layout.addRow("Waterfall Speed:", self.waterfall_speed_combo)
 
         spectrum_group.setLayout(spectrum_layout)
         layout.addWidget(spectrum_group)
 
-        # Add stretch
-        layout.addStretch(1)        # Add stretch at the end
-        layout.addStretch(1)
+        layout.addStretch()
 
-        # Hide all pages initially
-        for page in self.pages.values():
-            page.setVisible(False)
-        
-    def _create_ardop_advanced_page(self):
-        """Create advanced ARDOP settings page"""
-        page = self._create_page("ARDOP Advanced")
-        layout = page.layout()
+    def _on_mode_changed(self):
+        """Handle modem mode change"""
+        current_mode = self.mode_combo.currentData()
 
-        # ARQ Settings Group
-        arq_group = QGroupBox("ARQ Settings")
-        arq_layout = QFormLayout()
-
-        # ARQ Bandwidth Enforcement Mode
-        self.arq_bw_combo = QComboBox()
-        self.arq_bw_combo.addItem("Max - Try to negotiate up to max", "MAX")
-        self.arq_bw_combo.addItem("Force - Only use exact bandwidth", "FORCE")
-        self.arq_bw_combo.setToolTip("ARQBW enforcement mode:\nMAX - Try to negotiate up to specified bandwidth\nFORCE - Only use exactly the specified bandwidth")
-        arq_layout.addRow("ARQBW Mode:", self.arq_bw_combo)
-
-        # Call Bandwidth (CALLBW)
-        self.callbw_combo = QComboBox()
-        self.callbw_combo.addItem("Use ARQBW Setting", "UNDEFINED")
-        self.callbw_combo.addItem("200Hz Max", "200MAX")
-        self.callbw_combo.addItem("200Hz Force", "200FORCE")
-        self.callbw_combo.addItem("500Hz Max", "500MAX")
-        self.callbw_combo.addItem("500Hz Force", "500FORCE")
-        self.callbw_combo.addItem("1000Hz Max", "1000MAX")
-        self.callbw_combo.addItem("1000Hz Force", "1000FORCE")
-        self.callbw_combo.addItem("2000Hz Max", "2000MAX")
-        self.callbw_combo.addItem("2000Hz Force", "2000FORCE")
-        self.callbw_combo.setToolTip("Bandwidth used for ARQCALL, overrides ARQBW unless set to UNDEFINED")
-        arq_layout.addRow("Call Bandwidth:", self.callbw_combo)
-
-        # Auto Break
-        self.autobreak_check = QCheckBox()
-        self.autobreak_check.setToolTip("Automatically handle ARQ flow control (recommended)")
-        arq_layout.addRow("Auto Break:", self.autobreak_check)
-
-        # Busy Block
-        self.busyblock_check = QCheckBox()
-        self.busyblock_check.setToolTip("Reject incoming connections when channel is busy")
-        arq_layout.addRow("Busy Block:", self.busyblock_check)
-
-        arq_group.setLayout(arq_layout)
-        layout.addWidget(arq_group)
-
-        # FEC Settings Group
-        fec_group = QGroupBox("FEC Settings")
-        fec_layout = QFormLayout()
-
-        # FEC Mode for transmission
-        self.fec_mode_combo = QComboBox()
-        # Add FEC modes from the documentation
-        fec_modes = [
-            "4FSK.200.50S", "4PSK.200.100S", "4PSK.200.100", "8PSK.200.100", "16QAM.200.100",
-            "4FSK.500.100S", "4FSK.500.100", "4PSK.500.100", "8PSK.500.100", "16QAM.500.100",
-            "4PSK.1000.100", "8PSK.1000.100", "16QAM.1000.100",
-            "4PSK.2000.100", "8PSK.2000.100", "16QAM.2000.100",
-            "4FSK.2000.600", "4FSK.2000.600S"
-        ]
-        for mode in fec_modes:
-            self.fec_mode_combo.addItem(mode, mode)
-        self.fec_mode_combo.setToolTip("FEC frame type for data transmission")
-        fec_layout.addRow("FEC Mode:", self.fec_mode_combo)
-
-        # FEC ID
-        self.fec_id_check = QCheckBox()
-        self.fec_id_check.setToolTip("Automatically transmit ID frame with every FEC transmission")
-        fec_layout.addRow("Send FEC ID:", self.fec_id_check)
-
-        fec_group.setLayout(fec_layout)
-        layout.addWidget(fec_group)
-
-        # Tuning Settings Group
-        tuning_group = QGroupBox("Tuning Settings")
-        tuning_layout = QFormLayout()
-
-        # Tuning Range
-        self.tuning_range_spin = QSpinBox()
-        self.tuning_range_spin.setRange(0, 200)
-        self.tuning_range_spin.setSingleStep(10)
-        self.tuning_range_spin.setSuffix(" Hz")
-        self.tuning_range_spin.setToolTip("How many Hz from center frequency an incoming signal can be decoded")
-        tuning_layout.addRow("Tuning Range:", self.tuning_range_spin)
-
-        # Input Noise (for testing)
-        self.input_noise_spin = QSpinBox()
-        self.input_noise_spin.setRange(0, 20000)
-        self.input_noise_spin.setSingleStep(1000)
-        self.input_noise_spin.setToolTip("Add simulated Gaussian noise to input (diagnostic use only)")
-        tuning_layout.addRow("Input Noise:", self.input_noise_spin)
-
-        tuning_group.setLayout(tuning_layout)
-        layout.addWidget(tuning_group)
-
-        # Debug Settings Group
-        debug_group = QGroupBox("Debug Settings")
-        debug_layout = QFormLayout()
-
-        # Debug Log
-        self.debug_log_check = QCheckBox()
-        self.debug_log_check.setToolTip("Write debug log to disk")
-        debug_layout.addRow("Debug Log:", self.debug_log_check)
-
-        # Log Directory
-        self.log_dir_edit = QLineEdit()
-        self.log_dir_edit.setToolTip("Directory to write log files")
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self._browse_log_dir)
-
-        log_dir_layout = QHBoxLayout()
-        log_dir_layout.addWidget(self.log_dir_edit)
-        log_dir_layout.addWidget(browse_button)
-
-        debug_layout.addRow("Log Directory:", log_dir_layout)
-
-        # Log Level
-        self.log_level_spin = QSpinBox()
-        self.log_level_spin.setRange(1, 6)
-        self.log_level_spin.setToolTip("Log level (1-6, 1=most verbose)")
-        debug_layout.addRow("Log Level:", self.log_level_spin)
-
-        # Command Trace
-        self.cmd_trace_check = QCheckBox()
-        self.cmd_trace_check.setToolTip("Record commands in log file")
-        debug_layout.addRow("Command Trace:", self.cmd_trace_check)
-
-        debug_group.setLayout(debug_layout)
-        layout.addWidget(debug_group)
-
-        # Add stretch
-        layout.addStretch(1)        # Add stretch at the end
-        layout.addStretch(1)
-    
-    def _on_ardop_mode_changed(self, *args):
-        """Handle ARDOP mode change"""
-        # Enable/disable network settings based on mode
-        is_external = self.run_ardop_mode_combo.currentData() == "external"
-        if hasattr(self, 'network_group'):
-            self.network_group.setEnabled(is_external)
-            
-        # Update tree item visibility
+        # Show/hide ARDOP related items in the tree
         for i in range(self.tree_widget.topLevelItemCount()):
             item = self.tree_widget.topLevelItem(i)
             if item.text(0) == "ARDOP Settings":
-                for j in range(item.childCount()):
-                    child = item.child(j)
-                    if child.text(0) == "Network Settings":
-                        child.setHidden(not is_external)
+                item.setHidden(current_mode != "ARDOP")
 
-    def _browse_log_dir(self):
-        """Browse for log directory"""
-        log_dir = QFileDialog.getExistingDirectory(self, "Select Log Directory",
-                                                  self.log_dir_edit.text())
-        if log_dir:
-            self.log_dir_edit.setText(log_dir)    
-    
-    def _refresh_audio_devices(self):
-        """Refresh available audio devices"""
-        try:
-            # Store current selections if possible
-            try:
-                current_input = self.input_combo.currentData()
-                current_output = self.output_combo.currentData()
-            except (RuntimeError, AttributeError):
-                current_input = -1
-                current_output = -1
+        # If current page is ARDOP and mode is not ARDOP,
+        # switch to Modem page
+        if current_mode != "ARDOP" and self.current_page:
+            current_name = [k for k, v in self.pages.items() if v == self.current_page][0]
+            if "ARDOP" in current_name:
+                self._show_page("Modem")
 
-            # Clear existing items
-            self.input_combo.clear()
-            self.output_combo.clear()
-
-            # Create temporary AudioManager
-            audio_mgr = AudioManager(self.config)
-
-            try:
-                # Add "System Default" option with special index
-                self.input_combo.addItem("System Default", -1)
-                self.output_combo.addItem("System Default", -1)
-
-                # Track added device names to prevent duplicates
-                added_input_names = set()
-                added_output_names = set()
-
-                # Filter and add physical input devices
-                input_devices = audio_mgr.get_input_devices()
-                # Sort devices by name for consistent order
-                input_devices.sort(key=lambda x: x[0])
-
-                for name, idx in input_devices:
-                    # Skip devices with duplicate names or virtual devices
-                    if name in added_input_names or "Virtual" in name:
-                        continue
-                    # Add the device
-                    self.input_combo.addItem(name, idx)
-                    added_input_names.add(name)
-
-                # Filter and add physical output devices
-                output_devices = audio_mgr.get_output_devices()
-                # Sort devices by name for consistent order
-                output_devices.sort(key=lambda x: x[0])
-
-                for name, idx in output_devices:
-                    # Skip devices with duplicate names or virtual devices
-                    if name in added_output_names or "Virtual" in name:
-                        continue
-                    # Add the device
-                    self.output_combo.addItem(name, idx)
-                    added_output_names.add(name)
-
-                # Try to restore previous selection, fall back to config, then to default
-                input_idx = self.input_combo.findData(current_input)
-                if input_idx < 0:
-                    input_idx = self.input_combo.findData(self.config.get('audio', 'input_device'))
-                if input_idx < 0:
-                    input_idx = 0
-                self.input_combo.setCurrentIndex(input_idx)
-
-                output_idx = self.output_combo.findData(current_output)
-                if output_idx < 0:
-                    output_idx = self.output_combo.findData(self.config.get('audio', 'output_device'))
-                if output_idx < 0:
-                    output_idx = 0
-                self.output_combo.setCurrentIndex(output_idx)
-
-            finally:
-                # Always clean up the audio manager
-                audio_mgr.close()
-
-            logger.info("Audio devices refreshed successfully")
-
-        except Exception as e:
-            logger.exception("Error refreshing audio devices")
-            QMessageBox.warning(self, "Error",
-                              f"Failed to refresh audio devices: {str(e)}")
-
-    def _scan_serial_ports(self):
-        """Scan for available serial ports"""
-        try:
-            # Get list of ports
-            ports = list(serial.tools.list_ports.comports())
-
-            # Clear current port
-            current_port = self.port_edit.text()
-            self.port_edit.clear()
-
-            if ports:
-                # Set text to first port
-                self.port_edit.setText(ports[0].device)
-
-                # Show list of ports
-                port_text = "Available ports:\n\n"
-                for port in ports:
-                    port_text += f"{port.device} - {port.description}\n"
-
-                QMessageBox.information(self, "Serial Ports", port_text)
-            else:
-                QMessageBox.warning(self, "Serial Ports", "No serial ports found.")
-                # Restore previous value
-                self.port_edit.setText(current_port)
-
-        except Exception as e:
-            logger.exception(f"Error scanning serial ports: {e}")
-            QMessageBox.warning(self, "Error",
-                              f"Failed to scan serial ports: {str(e)}")
-
-    def _load_settings(self):
-        """Load current settings into dialog"""
-        try:
-            # Load audio settings
-            self.sample_rate_combo.setCurrentText(f"{self.config.get('audio', 'sample_rate')} Hz")
-            self.channels_combo.setCurrentIndex(self.config.get('audio', 'channels') - 1)
-            self.buffer_spin.setValue(self.config.get('audio', 'buffer_size'))
-            tx_level = int(self.config.get('modem', 'tx_level') * 100)
-            self.tx_level_slider.setValue(tx_level)
-
-            # Load modem settings
-            # Set mode
-            mode_index = self.mode_combo.findData(self.config.get('modem', 'mode'))
-            self.mode_combo.setCurrentIndex(max(0, mode_index))
-
-            # Set bandwidth
-            bw_index = self.bandwidth_combo.findData(self.config.get('modem', 'bandwidth'))
-            self.bandwidth_combo.setCurrentIndex(max(0, bw_index))
-
-            # Set center frequency
-            self.center_freq_spin.setValue(self.config.get('modem', 'center_freq'))
-
-            # Load ARDOP specific settings
-            protocol_mode = self.config.get('modem', 'protocol_mode', 'ARQ')
-            protocol_index = self.protocol_mode_combo.findData(protocol_mode)
-            self.protocol_mode_combo.setCurrentIndex(max(0, protocol_index))
-
-            self.arq_timeout_spin.setValue(self.config.get('modem', 'arq_timeout', 120))
-            self.fec_repeats_spin.setValue(self.config.get('modem', 'fec_repeats', 0))
-            self.leader_spin.setValue(self.config.get('modem', 'leader', 120))
-            self.trailer_spin.setValue(self.config.get('modem', 'trailer', 0))
-            self.squelch_spin.setValue(self.config.get('modem', 'squelch', 5))
-            self.busydet_spin.setValue(self.config.get('modem', 'busydet', 5))
-            self.extradelay_spin.setValue(self.config.get('modem', 'extradelay', 0))
-            self.consolelog_spin.setValue(self.config.get('modem', 'consolelog', 6))
-            self.cwid_check.setChecked(self.config.get('modem', 'cwid', False))
-            self.fsk_only_check.setChecked(self.config.get('modem', 'fskonly', False))
-            self.use600_check.setChecked(self.config.get('modem', 'use600modes', False))
-            self.faststart_check.setChecked(self.config.get('modem', 'faststart', True))
-            self.custom_commands.setText(self.config.get('modem', 'custom_commands', ''))
-
-            # Set spectrum settings
-            self.fft_avg_spin.setValue(self.config.get('ui', 'fft_average_frames', 2))
-            self.spectrum_ref_spin.setValue(self.config.get('ui', 'spectrum_ref_level', -60))
-            self.spectrum_range_spin.setValue(self.config.get('ui', 'spectrum_range', 70))
-
-            # Set waterfall settings
-            waterfall_speed = self.config.get('ui', 'waterfall_speed', 'medium')
-            waterfall_speed_index = self.waterfall_speed_combo.findData(waterfall_speed)
-            self.waterfall_speed_combo.setCurrentIndex(max(0, waterfall_speed_index))
-
-            # Load HAMLIB settings
-            self.hamlib_enabled_check.setChecked(self.config.get('hamlib', 'enabled'))
-
-            # Populate rig models
-            hamlib_manager = self.parent().hamlib_manager if self.parent() else None
-            if hamlib_manager:
-                rig_models = hamlib_manager.get_available_rig_models()
-                self.rig_model_combo.clear()
-                for model_id, name in rig_models:
-                    self.rig_model_combo.addItem(name, model_id)
-
-                # Set current model
-                current_model = self.config.get('hamlib', 'rig_model')
-                for i in range(self.rig_model_combo.count()):
-                    if self.rig_model_combo.itemData(i) == current_model:
-                        self.rig_model_combo.setCurrentIndex(i)
-                        break
-
-            # Set other HAMLIB settings
-            self.port_edit.setText(self.config.get('hamlib', 'port'))
-            self.baud_combo.setCurrentText(str(self.config.get('hamlib', 'baud_rate')))
-            self.ptt_combo.setCurrentText(self.config.get('hamlib', 'ptt_control'))
-            # Load UI settings
-            self.theme_combo.setCurrentText(self.config.get('ui', 'theme').capitalize())
-            self.waterfall_combo.setCurrentText(self.config.get('ui', 'waterfall_colors').capitalize())
-
-            self.update_rate_spin.setValue(self.config.get('ui', 'spectrum_update_rate'))
-
-            # Load display settings
-            self.show_freq_check.setChecked(self.config.get('ui', 'show_freq_markers', True))
-            self.show_grid_check.setChecked(self.config.get('ui', 'show_grid', True))
-            self.average_check.setChecked(self.config.get('ui', 'fft_average', False))
-            self.peak_hold_check.setChecked(self.config.get('ui', 'peak_hold', False))
-
-            # Load ARDOP Advanced settings
-            # ARQ Settings
-            arqbw_mode = self.config.get('modem', 'arqbw_mode', 'MAX')
-            if arqbw_mode == 'MAX':
-                self.arq_bw_combo.setCurrentIndex(0)
-            else:
-                self.arq_bw_combo.setCurrentIndex(1)
-
-            callbw = self.config.get('modem', 'callbw', 'UNDEFINED')
-            for i in range(self.callbw_combo.count()):
-                if self.callbw_combo.itemData(i) == callbw:
-                    self.callbw_combo.setCurrentIndex(i)
-                    break
-
-            self.autobreak_check.setChecked(self.config.get('modem', 'autobreak', True))
-            self.busyblock_check.setChecked(self.config.get('modem', 'busyblock', False))
-
-            # FEC Settings
-            fec_mode = self.config.get('modem', 'fec_mode', '4FSK.500.100S')
-            for i in range(self.fec_mode_combo.count()):
-                if self.fec_mode_combo.itemData(i) == fec_mode:
-                    self.fec_mode_combo.setCurrentIndex(i)
-                    break
-
-            self.fec_id_check.setChecked(self.config.get('modem', 'fec_id', False))
-
-            # Tuning Settings
-            self.tuning_range_spin.setValue(self.config.get('modem', 'tuning_range', 100))
-            self.input_noise_spin.setValue(self.config.get('modem', 'input_noise', 0))
-
-            # Debug Settings
-            self.debug_log_check.setChecked(self.config.get('modem', 'debug_log', False))
-            self.log_dir_edit.setText(self.config.get('modem', 'log_dir', ''))         
-            self.cmd_trace_check.setChecked(self.config.get('modem', 'cmd_trace', False))
-
-            # Load network settings
-            ardop_mode = self.config.get('modem', 'ardop_mode', 'internal')
-            self.run_ardop_mode_combo.setCurrentIndex(
-                0 if ardop_mode == 'internal' else 1
-            )
-            self.ardop_ip_edit.setText(self.config.get('modem', 'ardop_ip', '127.0.0.1'))
-            self.ardop_port_spin.setValue(self.config.get('modem', 'ardop_port', 8515))
+    def _on_ardop_mode_changed(self, index):
+        """Handle ARDOP mode change between internal and external"""
+        mode = self.run_ardop_mode_combo.currentData()
+        # Show/hide network settings based on mode
+        self.network_group.setVisible(mode == "external")
             
-            # Update network settings enabled state
-            self._on_ardop_mode_changed()
+    def _reset_modem_settings(self):
+        """Reset modem settings to defaults"""
+        try:
+            # Reset basic modem settings
+            self.bandwidth_combo.setCurrentText("500 Hz")
+            self.center_freq_spin.setValue(1500)
+
+            QMessageBox.information(self, "Settings Reset", 
+                                  "Modem settings have been reset to defaults.")
+            
+            logger.info("Modem settings reset to defaults")
+        except Exception as e:
+            logger.exception("Error resetting modem settings")
+            QMessageBox.warning(self, "Error", 
+                              f"Failed to reset settings: {str(e)}")
+
+    def _reset_ardop_settings(self):
+        """Reset ARDOP-specific settings to defaults"""
+        try:
+            # Reset ARDOP mode and protocol settings
+            self.run_ardop_mode_combo.setCurrentIndex(0)  # Internal mode
+            self.protocol_mode_combo.setCurrentIndex(0)  # ARQ Mode
+            self.arq_timeout_spin.setValue(120)          # 120 seconds
+
+            # Reset timing settings
+            self.leader_spin.setValue(120)               # 120 ms
+            self.trailer_spin.setValue(0)                # 0 ms
+
+            # Reset operation settings
+            self.cwid_check.setChecked(False)           # CW ID off
+            self.fsk_only_check.setChecked(False)       # FSK only off
+            self.use600_check.setChecked(False)         # 600 baud modes off
+            self.debug_log_check.setChecked(False)      # Debug log off
+
+            QMessageBox.information(self, "Settings Reset",
+                                  "ARDOP settings have been reset to defaults.")
+            
+            logger.info("ARDOP settings reset to defaults")
 
         except Exception as e:
-            logger.exception(f"Error loading settings: {e}")
+            logger.exception("Error resetting ARDOP settings")
             QMessageBox.warning(self, "Error",
-                              f"Failed to load settings: {str(e)}")
+                              "Failed to reset ARDOP settings: {str(e)}")
 
     def _apply_settings(self):
-        """Apply current dialog settings to config"""
-        try:            # Apply audio settings
+        """Apply settings to config"""
+        try:
+            # Audio settings
             self.config.set('audio', 'sample_rate', self.sample_rate_combo.currentData())
             self.config.set('audio', 'channels', self.channels_combo.currentData())
             self.config.set('audio', 'buffer_size', self.buffer_spin.value())
-
-            # Save audio device selections
             self.config.set('audio', 'input_device', self.input_combo.currentData())
             self.config.set('audio', 'output_device', self.output_combo.currentData())
-
-            tx_level = self.tx_level_slider.value() / 100.0
-            self.config.set('modem', 'tx_level', tx_level)
-
-            # Apply modem settings
+            self.config.set('audio', 'tx_level', self.tx_level_slider.value() / 100.0)            # Modem settings
             self.config.set('modem', 'mode', self.mode_combo.currentData())
             self.config.set('modem', 'bandwidth', self.bandwidth_combo.currentData())
-            self.config.set('modem', 'center_freq', self.center_freq_spin.value())
+            self.config.set('modem', 'center_freq', self.center_freq_spin.value())     
+            self.config.set('modem', 'ardop_mode', self.run_ardop_mode_combo.currentData())
+            
+            # ARDOP network settings
+            self.config.set('modem', 'ardop_ip', self.ardop_ip_edit.text())
+            self.config.set('modem', 'ardop_port', self.ardop_port_spin.value())
+              
+            for attr, setting in {
+                'protocol_mode_combo': 'protocol_mode',
+                'arq_timeout_spin': 'arq_timeout',
+                'leader_spin': 'leader',
+                'trailer_spin': 'trailer',
+                'cwid_check': 'cwid',
+                'fsk_only_check': 'fskonly',
+                'use600_check': 'use600modes',
+                'debug_log_check': 'debug_log'
+            }.items():
+                if hasattr(self, attr):
+                    value = getattr(self, attr)
+                    if isinstance(value, QCheckBox):
+                        self.config.set('modem', setting, value.isChecked())
+                    elif isinstance(value, (QSpinBox, QComboBox)):
+                        self.config.set('modem', setting, value.value() if isinstance(value, QSpinBox) else value.currentText())
 
-            # Apply ARDOP specific settings
-            self.config.set('modem', 'protocol_mode', self.protocol_mode_combo.currentData())
-            self.config.set('modem', 'arq_timeout', self.arq_timeout_spin.value())
-            self.config.set('modem', 'fec_repeats', self.fec_repeats_spin.value())
-            self.config.set('modem', 'leader', self.leader_spin.value())
-            self.config.set('modem', 'trailer', self.trailer_spin.value())
-            self.config.set('modem', 'squelch', self.squelch_spin.value())
-            self.config.set('modem', 'busydet', self.busydet_spin.value())
-            self.config.set('modem', 'extradelay', self.extradelay_spin.value())
-            self.config.set('modem', 'consolelog', self.consolelog_spin.value())
-            self.config.set('modem', 'cwid', self.cwid_check.isChecked())
-            self.config.set('modem', 'fskonly', self.fsk_only_check.isChecked())
-            self.config.set('modem', 'use600modes', self.use600_check.isChecked())
-            self.config.set('modem', 'faststart', self.faststart_check.isChecked())
-            self.config.set('modem', 'custom_commands', self.custom_commands.text())
-
-            # Apply spectrum settings
-            self.config.set('ui', 'fft_average_frames', self.fft_avg_spin.value())
-            self.config.set('ui', 'spectrum_ref_level', self.spectrum_ref_spin.value())
-            self.config.set('ui', 'spectrum_range', self.spectrum_range_spin.value())
-            self.config.set('ui', 'waterfall_speed', self.waterfall_speed_combo.currentData())
-
-            # Apply HAMLIB settings
+            # HAMLIB settings
             self.config.set('hamlib', 'enabled', self.hamlib_enabled_check.isChecked())
-            self.config.set('hamlib', 'rig_model', self.rig_model_combo.currentData())
             self.config.set('hamlib', 'port', self.port_edit.text())
             self.config.set('hamlib', 'baud_rate', int(self.baud_combo.currentText()))
             self.config.set('hamlib', 'ptt_control', self.ptt_combo.currentText())
 
-            # Apply UI settings
-            self.config.set('ui', 'theme', self.theme_combo.currentData())
-            self.config.set('ui', 'waterfall_colors', self.waterfall_combo.currentData())
-            self.config.set('ui', 'fft_size', 2048)  # Fixed at 2048
-            self.config.set('ui', 'spectrum_update_rate', self.update_rate_spin.value())
+            # Display settings
+            self.config.set('display', 'waterfall_colors', self.waterfall_combo.currentText())
+            self.config.set('display', 'show_freq_markers', self.show_freq_check.isChecked())
+            self.config.set('display', 'show_grid', self.show_grid_check.isChecked())
+            self.config.set('display', 'update_rate', self.update_rate_spin.value())
+            self.config.set('display', 'fft_average', self.fft_avg_spin.value())
+            self.config.set('display', 'ref_level', self.spectrum_ref_spin.value())
+            self.config.set('display', 'range', self.spectrum_range_spin.value())
 
-            # Apply display settings
-            self.config.set('ui', 'show_freq_markers', self.show_freq_check.isChecked())
-            self.config.set('ui', 'show_grid', self.show_grid_check.isChecked())
-            self.config.set('ui', 'fft_average', self.average_check.isChecked())            # Apply user settings
-            self.config.set('user', 'callsign', self.callsign_edit.text().upper())
+            # Station settings
+            self.config.set('station', 'callsign', self.callsign_edit.text().upper())
+            self.config.set('station', 'fullname', self.fullname_edit.text())
+            self.config.set('station', 'email', self.email_edit.text())
+            self.config.set('station', 'city', self.city_edit.text())
+            self.config.set('station', 'grid_square', self.grid_square_edit.text())
 
-            # Save new user fields
-            self.config.set('user', 'fullname', self.fullname_edit.text())
-            self.config.set('user', 'email', self.email_edit.text())
-            self.config.set('user', 'city', self.city_edit.text())
-            self.config.set('user', 'grid_square', self.grid_square_edit.text())
-
-            # Save ARDOP network settings
-            self.config.set('modem', 'ardop_mode', self.run_ardop_mode_combo.currentData())
-            self.config.set('modem', 'ardop_ip', self.ardop_ip_edit.text())
-            self.config.set('modem', 'ardop_port', self.ardop_port_spin.value())
-
-            # Save config
             self.config.save()
             return True
         except Exception as e:
-            logger.exception(f"Error applying settings: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to apply settings: {e}")
+            logger.exception("Error applying settings")
+            QMessageBox.warning(self, "Error", 
+                              f"Failed to apply settings: {str(e)}")
             return False
 
-    @pyqtSlot()
     def _on_apply_clicked(self):
-        """Handle Apply button click - save settings but keep dialog open"""
+        """Handle Apply button click"""
         if self._apply_settings():
-            # Show brief success message
-            QMessageBox.information(self, "Settings Saved", "Settings have been applied successfully.")
-            
-    @pyqtSlot()
-    def reject(self):
-        """Handle Cancel button"""
-        # Ask for confirmation if settings were changed
-        reply = QMessageBox.question(self, 'Close Settings',
-                                   'Are you sure you want to close the settings window?\n'
-                                   'Any unapplied changes will be lost.',
-                                   QMessageBox.Yes | QMessageBox.No,
-                                   QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            super().reject()
-    @pyqtSlot()
+            QMessageBox.information(self, "Settings Saved",
+                                  "Settings have been applied successfully.")
+
     def _ptt_on(self):
         """Test PTT ON"""
         try:
@@ -1264,10 +665,8 @@ class SettingsDialog(QDialog):
                 QMessageBox.warning(self, "PTT Test", "HAMLIB not connected. Please connect first.")
         except Exception as e:
             logger.exception(f"Error testing PTT: {e}")
-            QMessageBox.warning(self, "Error",
-                              f"Failed to test PTT: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to test PTT: {str(e)}")
 
-    @pyqtSlot()
     def _ptt_off(self):
         """Test PTT OFF"""
         try:
@@ -1281,8 +680,7 @@ class SettingsDialog(QDialog):
                 QMessageBox.warning(self, "PTT Test", "HAMLIB not connected. Please connect first.")
         except Exception as e:
             logger.exception(f"Error testing PTT: {e}")
-            QMessageBox.warning(self, "Error",
-                              f"Failed to test PTT: {str(e)}")    
+            QMessageBox.warning(self, "Error", f"Failed to test PTT: {str(e)}")    
     def showEvent(self, event):
         """Show event handler - ensure dialog is properly positioned"""
         super().showEvent(event)
@@ -1301,27 +699,12 @@ class SettingsDialog(QDialog):
             frame.moveCenter(geom.center())
             self.move(frame.topLeft())
 
-    def _on_mode_changed(self):
-        """Handle modem mode change"""
-        current_mode = self.mode_combo.currentData()
-
-        # Show/hide ARDOP related items in the tree
-        for i in range(self.tree_widget.topLevelItemCount()):
-            item = self.tree_widget.topLevelItem(i)
-            if item.text(0) in ["ARDOP Settings", "ARDOP Advanced"]:
-                item.setHidden(current_mode != "ARDOP")
-
-        # If current page is ARDOP related and mode is not ARDOP,
-        # switch to Modem page
-        if current_mode != "ARDOP" and self.current_page:
-            current_name = [k for k, v in self.pages.items() if v == self.current_page][0]
-            if "ARDOP" in current_name:
-                self._show_page("Modem")
-
     def _reset_modem_settings(self):
         """Reset modem settings to defaults"""
         try:
-            # Reset ARDOP specific settings to defaults
+            # Reset ARDOP specific settings
+            self.bandwidth_combo.setCurrentText("500 Hz")
+            self.center_freq_spin.setValue(1500)
             self.protocol_mode_combo.setCurrentIndex(0)  # ARQ Mode
             self.arq_timeout_spin.setValue(120)          # 120 seconds
             self.fec_repeats_spin.setValue(0)            # No repeats
@@ -1345,7 +728,7 @@ class SettingsDialog(QDialog):
 
         except Exception as e:
             logger.exception(f"Error resetting modem settings: {e}")
-            QMessageBox.warning(self, "Error",
+            QMessageBox.warning(self, "Error", 
                               f"Failed to reset modem settings: {str(e)}")
 
     def _initialize_settings(self):
@@ -1375,3 +758,255 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.exception("Error initializing UI")
             QMessageBox.warning(self, "Error", f"Failed to initialize settings: {str(e)}")
+
+    def _create_station_page(self):
+        """Create station settings page"""
+        page = self._create_page("Station")
+        layout = page.layout()
+        
+        # Station details group
+        station_group = QGroupBox("Station Details")
+        station_layout = QFormLayout()
+
+        # Callsign
+        self.callsign_edit = QLineEdit()
+        self.callsign_edit.setMaxLength(10)
+        station_layout.addRow("Callsign:", self.callsign_edit)
+
+        # Full Name
+        self.fullname_edit = QLineEdit()
+        self.fullname_edit.setMaxLength(50)
+        station_layout.addRow("Full Name:", self.fullname_edit)
+
+        # Email
+        self.email_edit = QLineEdit()
+        self.email_edit.setMaxLength(100)
+        station_layout.addRow("Email:", self.email_edit)
+
+        # City
+        self.city_edit = QLineEdit()
+        self.city_edit.setMaxLength(50)
+        station_layout.addRow("City:", self.city_edit)
+
+        # Grid Square
+        self.grid_square_edit = QLineEdit()
+        self.grid_square_edit.setMaxLength(6)
+        self.grid_square_edit.setToolTip("Grid square is the location of your station")
+        station_layout.addRow("Grid Square:", self.grid_square_edit)
+
+        # Set the layout
+        station_group.setLayout(station_layout)
+        layout.addWidget(station_group)
+        layout.addStretch(1)    
+    
+    def _refresh_audio_devices(self):
+        """Refresh available audio devices in a cross-platform compatible way"""
+        try:
+            # Store current selections
+            current_input = self.input_combo.currentData() if self.input_combo.currentData() else -1
+            current_output = self.output_combo.currentData() if self.output_combo.currentData() else -1
+
+            # Clear existing items
+            self.input_combo.clear()
+            self.output_combo.clear()
+
+            # Add system default options
+            self.input_combo.addItem("System Default", -1)
+            self.output_combo.addItem("System Default", -1)
+
+            # Add some common device names as placeholders until we can properly detect
+            self.input_combo.addItem("Microphone", 1)
+            self.input_combo.addItem("Line In", 2)
+            self.output_combo.addItem("Speakers", 1)
+            self.output_combo.addItem("Headphones", 2)
+
+            # Try to restore previous selection
+            input_idx = self.input_combo.findData(current_input)
+            if input_idx < 0:
+                input_idx = self.input_combo.findData(self.config.get('audio', 'input_device', -1))
+            if input_idx < 0:
+                input_idx = 0
+            self.input_combo.setCurrentIndex(input_idx)
+
+            output_idx = self.output_combo.findData(current_output)
+            if output_idx < 0:
+                output_idx = self.output_combo.findData(self.config.get('audio', 'output_device', -1))
+            if output_idx < 0:
+                output_idx = 0
+            self.output_combo.setCurrentIndex(output_idx)
+
+            try:
+                
+                # Get input devices
+                input_devices = []
+                for i, device in enumerate(sd.query_devices()):
+                    if device['max_input_channels'] > 0:
+                        name = device['name']
+                        if not any(x in name.lower() for x in ['virtual', 'vb-audio']):
+                            input_devices.append((name, i))
+
+                # Get output devices                
+                output_devices = []
+                for i, device in enumerate(sd.query_devices()):
+                    if device['max_output_channels'] > 0:
+                        name = device['name']
+                        if not any(x in name.lower() for x in ['virtual', 'vb-audio']):
+                            output_devices.append((name, i))
+
+                # Sort devices by name
+                input_devices.sort(key=lambda x: x[0])
+                output_devices.sort(key=lambda x: x[0])
+
+                # Add input devices
+                for name, idx in input_devices:
+                    self.input_combo.addItem(name, idx)
+
+                # Add output devices
+                for name, idx in output_devices:
+                    self.output_combo.addItem(name, idx)
+
+                # Try to restore previous selection
+                input_idx = self.input_combo.findData(current_input)
+                if input_idx < 0:
+                    input_idx = self.input_combo.findData(self.config.get('audio', 'input_device', -1))
+                if input_idx < 0:
+                    input_idx = 0
+                self.input_combo.setCurrentIndex(input_idx)
+
+                output_idx = self.output_combo.findData(current_output)
+                if output_idx < 0:
+                    output_idx = self.output_combo.findData(self.config.get('audio', 'output_device', -1))
+                if output_idx < 0:
+                    output_idx = 0
+                self.output_combo.setCurrentIndex(output_idx)
+
+            except Exception as e:
+                logger.error(f"Error querying audio devices: {e}")
+                # Add placeholder items
+                self.input_combo.addItem("No devices found", -1)
+                self.output_combo.addItem("No devices found", -1)
+
+        except Exception as e:
+            logger.exception("Error refreshing audio devices")
+            QMessageBox.warning(self, "Error",
+                              f"Failed to refresh audio devices: {str(e)}")
+
+    def _load_settings(self):
+        """Load settings from config into UI"""
+        try:
+            # Load audio settings
+            self.sample_rate_combo.setCurrentText(f"{self.config.get('audio', 'sample_rate', 48000)} Hz")
+            self.channels_combo.setCurrentIndex(self.config.get('audio', 'channels', 1) - 1)
+            self.buffer_spin.setValue(self.config.get('audio', 'buffer_size', 1024))
+            
+            # Load modem settings
+            tx_level = int(self.config.get('modem', 'tx_level', 0.5) * 100)
+            self.tx_level_slider.setValue(tx_level)
+
+            # Set mode
+            mode = self.config.get('modem', 'mode', 'ARDOP')
+            mode_index = self.mode_combo.findData(mode)
+            if mode_index >= 0:
+                self.mode_combo.setCurrentIndex(mode_index)
+
+            # Load ARDOP mode and network settings
+            ardop_mode = self.config.get('modem', 'ardop_mode', 'internal')
+            mode_index = self.run_ardop_mode_combo.findData(ardop_mode)
+            if mode_index >= 0:
+                self.run_ardop_mode_combo.setCurrentIndex(mode_index)
+                self._on_ardop_mode_changed(mode_index)
+
+            # Load network settings
+            self.ardop_ip_edit.setText(self.config.get('modem', 'ardop_ip', '127.0.0.1'))
+            self.ardop_port_spin.setValue(self.config.get('modem', 'ardop_port', 8515))
+
+            # Set bandwidth
+            bw = self.config.get('modem', 'bandwidth', 500)
+            bw_index = self.bandwidth_combo.findData(bw)
+            if bw_index >= 0:
+                self.bandwidth_combo.setCurrentIndex(bw_index)
+
+            # Set center frequency
+            self.center_freq_spin.setValue(self.config.get('modem', 'center_freq', 1500))
+
+            # Load ARDOP protocol settings
+            if hasattr(self, 'protocol_mode_combo'):
+                self.protocol_mode_combo.setCurrentText(self.config.get('modem', 'protocol_mode', 'ARQ'))
+            if hasattr(self, 'arq_timeout_spin'):
+                self.arq_timeout_spin.setValue(self.config.get('modem', 'arq_timeout', 120))
+            if hasattr(self, 'leader_spin'):
+                self.leader_spin.setValue(self.config.get('modem', 'leader', 120))
+            if hasattr(self, 'trailer_spin'):
+                self.trailer_spin.setValue(self.config.get('modem', 'trailer', 0))
+            if hasattr(self, 'cwid_check'):
+                self.cwid_check.setChecked(self.config.get('modem', 'cwid', False))
+            if hasattr(self, 'fsk_only_check'):
+                self.fsk_only_check.setChecked(self.config.get('modem', 'fskonly', False))
+            if hasattr(self, 'use600_check'):
+                self.use600_check.setChecked(self.config.get('modem', 'use600modes', False))
+            if hasattr(self, 'debug_log_check'):
+                self.debug_log_check.setChecked(self.config.get('modem', 'debug_log', False))
+
+            # HAMLIB settings
+            self.hamlib_enabled_check.setChecked(self.config.get('hamlib', 'enabled', False))
+            self.port_edit.setText(self.config.get('hamlib', 'port', ''))
+            self.baud_combo.setCurrentText(str(self.config.get('hamlib', 'baud_rate', 9600)))
+            self.ptt_combo.setCurrentText(self.config.get('hamlib', 'ptt_control', 'CAT'))
+
+            # Display settings
+            self.waterfall_combo.setCurrentText(self.config.get('display', 'waterfall_colors', 'Default'))
+            self.show_freq_check.setChecked(self.config.get('display', 'show_freq_markers', True))
+            self.show_grid_check.setChecked(self.config.get('display', 'show_grid', True))
+            self.update_rate_spin.setValue(self.config.get('display', 'update_rate', 10))
+            self.fft_avg_spin.setValue(self.config.get('display', 'fft_average', 2))
+            self.spectrum_ref_spin.setValue(self.config.get('display', 'ref_level', -60))
+            self.spectrum_range_spin.setValue(self.config.get('display', 'range', 70))
+
+            # Station settings
+            self.callsign_edit.setText(self.config.get('station', 'callsign', '').upper())
+            self.fullname_edit.setText(self.config.get('station', 'fullname', ''))
+            self.email_edit.setText(self.config.get('station', 'email', ''))
+            self.city_edit.setText(self.config.get('station', 'city', ''))
+            self.grid_square_edit.setText(self.config.get('station', 'grid_square', ''))
+
+        except Exception as e:
+            logger.exception("Error loading settings")
+            QMessageBox.warning(self, "Error", 
+                              f"Failed to load settings: {str(e)}")
+
+    def _browse_log_dir(self):
+        """Browse for log directory"""
+        try:
+            current_dir = self.log_dir_edit.text() or os.path.expanduser("~")
+            directory = QFileDialog.getExistingDirectory(
+                self,
+                "Select Log Directory",
+                current_dir,
+                QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+            )
+            if directory:
+                self.log_dir_edit.setText(directory)
+        except Exception as e:
+            logger.exception("Error browsing for log directory")
+            QMessageBox.warning(self, "Error",
+                              f"Failed to browse for directory: {str(e)}")
+
+    def _scan_serial_ports(self):
+        """Scan for available serial ports"""
+        try:
+            ports = []
+            for port in serial.tools.list_ports.comports():
+                ports.append(port.device)
+            
+            if ports:
+                self.port_edit.setText(ports[0])  # Set first port as default
+                port_list = "\n".join(ports)
+                QMessageBox.information(self, "Available Ports", 
+                                      f"Found ports:\n{port_list}")
+            else:
+                QMessageBox.warning(self, "No Ports", 
+                                  "No serial ports found")
+        except Exception as e:
+            logger.exception("Error scanning serial ports")
+            QMessageBox.warning(self, "Error",
+                              f"Failed to scan serial ports: {str(e)}")
