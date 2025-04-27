@@ -3,12 +3,13 @@ Settings dialog for SSDigi Modem
 """
 import logging
 import os
-from PyQt5.QtWidgets import (QDialog, QTabWidget, QVBoxLayout, QHBoxLayout,
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                             QLabel, QPushButton, QComboBox, QCheckBox,
                             QSpinBox, QDoubleSpinBox, QLineEdit, QGroupBox,
                             QFormLayout, QFileDialog, QDialogButtonBox,
                             QMessageBox, QSlider, QWidget, QApplication,
-                            QSizePolicy)
+                            QSizePolicy, QTreeWidget, QTreeWidgetItem,
+                            QSplitter, QScrollArea)
 import sys
 from PyQt5.QtCore import Qt, pyqtSlot, QTimer
 from PyQt5.QtGui import QIcon
@@ -26,10 +27,12 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.config = config
         self.initialized = False
+        self.current_page = None
+        self.pages = {}  # Store created setting pages
         
         # Set window properties
         self.setWindowTitle("SSDigi Modem Settings")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(800, 600)  # More compact size while maintaining usability
         
         # Create the UI
         self._create_ui()
@@ -37,13 +40,6 @@ class SettingsDialog(QDialog):
         # Schedule initialization for after the event loop starts
         QTimer.singleShot(100, self._refresh_audio_devices)
         QTimer.singleShot(200, self._load_settings)    
-        
-        # Set window properties
-        self.setWindowTitle("SSDigi Modem Settings")
-        self.setMinimumSize(800, 600)
-        
-        # Create the UI first
-        self._create_ui()
         
         # Center window
         self._center_dialog()
@@ -63,33 +59,261 @@ class SettingsDialog(QDialog):
         window_geometry.moveCenter(cp)
         self.move(window_geometry.topLeft())
     def _create_ui(self):
-        """Create and set up the UI"""        # Create main layout
+        """Create and set up the UI"""
+        # Create main layout
         main_layout = QVBoxLayout(self)
 
-        # Create tab widget first
-        self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
+        # Create splitter
+        splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(splitter)
 
-        # Create tabs in order
-        self._create_audio_tab()
-        self._create_modem_tab()
-        self._create_station_tab()
-        self._create_hamlib_tab()
-        self._create_ui_tab()
-        self._create_ardop_advanced_tab()
+        # Create tree widget for navigation
+        self.tree_widget = QTreeWidget()
+        self.tree_widget.setHeaderHidden(True)
+        self.tree_widget.setMinimumWidth(200)
+        self.tree_widget.setMaximumWidth(250)
+        
+        # Style the tree widget to look like Registry Editor        # Modern tree widget styling
+        self.tree_widget.setStyleSheet("""
+            QTreeWidget {
+                background-color: #f8f9fa;
+                border: none;
+                border-right: 1px solid #e0e0e0;
+                outline: none;
+            }
+            QTreeWidget::item {
+                height: 30px;
+                color: #2c3e50;
+                padding-left: 5px;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QTreeWidget::item:selected {
+                background-color: #3498db;
+                color: #ffffff;
+            }
+            QTreeWidget::item:hover:!selected {
+                background-color: #e3f2fd;
+            }
+            QTreeWidget::branch {
+                background: transparent;
+            }
+            QTreeWidget::branch:has-children:!has-siblings:closed,
+            QTreeWidget::branch:closed:has-children:has-siblings {
+                image: url(right_arrow.png);
+            }
+            QTreeWidget::branch:open:has-children:!has-siblings,
+            QTreeWidget::branch:open:has-children:has-siblings {
+                image: url(down_arrow.png);
+            }
+        """)
+        splitter.addWidget(self.tree_widget)
+
+        # Create scroll area for settings
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # Style the scroll area        # Apply modern styling to all widgets
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+            }
+            QScrollArea {
+                background-color: #ffffff;
+                border: none;
+            }
+            QWidget {
+                background-color: #ffffff;
+            }
+            QGroupBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 1.5ex;
+                font-weight: 500;
+                background-color: #ffffff;
+                padding: 12px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                padding: 0 5px;
+                color: #2c3e50;
+            }            
+            QComboBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 2px 5px;
+                min-height: 16px;
+                background-color: #ffffff;
+                font-size: 9pt;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 16px;
+            }
+            QComboBox::down-arrow {
+                image: url(down_arrow.png);
+                width: 10px;
+                height: 10px;
+            }
+            QSpinBox, QDoubleSpinBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 2px 5px;
+                min-height: 16px;
+                font-size: 9pt;
+            }
+            QLineEdit {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 2px 5px;
+                min-height: 16px;
+                background-color: #ffffff;
+                font-size: 9pt;
+            }
+            QPushButton {
+                background-color: #2980b9;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 15px;
+                min-width: 80px;
+                outline: none;
+            }
+            QPushButton:hover {
+                background-color: #3498db;
+            }
+            QPushButton:pressed {
+                background-color: #2472a4;
+            }
+            QCheckBox {
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #e0e0e0;
+                border-radius: 3px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2980b9;
+                border-color: #2980b9;
+            }
+            QSlider::groove:horizontal {
+                border: 1px solid #e0e0e0;
+                height: 6px;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #2980b9;
+                width: 18px;
+                height: 18px;
+                margin: -6px 0;
+                border-radius: 9px;
+            }
+            QFormLayout {
+                spacing: 12px;
+            }
+            QLabel {
+                color: #2c3e50;
+            }
+        """)
+        
+        self.settings_container = QWidget()
+        self.settings_layout = QVBoxLayout(self.settings_container)
+        self.settings_layout.setContentsMargins(10, 10, 10, 10)
+        self.settings_layout.setSpacing(10)
+        scroll_area.setWidget(self.settings_container)
+        splitter.addWidget(scroll_area)
+
+        # Set up tree items
+        audio_item = QTreeWidgetItem(["Audio"])
+        modem_item = QTreeWidgetItem(["Modem"])
+        ardop_item = QTreeWidgetItem(["ARDOP Settings"])
+        ardop_advanced_item = QTreeWidgetItem(["ARDOP Advanced"])
+        station_item = QTreeWidgetItem(["Station"])
+        hamlib_item = QTreeWidgetItem(["HAMLIB"])
+        display_item = QTreeWidgetItem(["Display"])
+
+        # Set icons for tree items (you can add icons later)
+        for item in [audio_item, modem_item, ardop_item, ardop_advanced_item,
+                    station_item, hamlib_item, display_item]:
+            item.setIcon(0, QIcon())
+
+        # Add items to tree
+        self.tree_widget.addTopLevelItem(audio_item)
+        self.tree_widget.addTopLevelItem(modem_item)
+        self.tree_widget.addTopLevelItem(ardop_item)
+        modem_item.addChild(ardop_advanced_item)  # Make ARDOP Advanced a child of Modem
+        self.tree_widget.addTopLevelItem(station_item)
+        self.tree_widget.addTopLevelItem(hamlib_item)
+        self.tree_widget.addTopLevelItem(display_item)
+
+        # Expand all items by default
+        self.tree_widget.expandAll()
+
+        # Connect tree selection changed
+        self.tree_widget.itemClicked.connect(self._on_tree_item_clicked)
+
+        # Create all pages but keep them hidden
+        self._create_audio_page()
+        self._create_modem_page()
+        self._create_ardop_page()
+        self._create_ardop_advanced_page()
+        self._create_station_page()
+        self._create_hamlib_page()
+        self._create_display_page()
 
         # Set up dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._apply_settings)
+        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._apply_settings)        # Style the dialog buttons
+        button_box.setStyleSheet("""
+            QDialogButtonBox {
+                button-layout: stretch;
+            }
+            QPushButton {
+                min-width: 100px;
+                padding: 8px 20px;
+                margin: 0 5px;
+                border-radius: 4px;
+                font-weight: 500;
+            }
+            QPushButton[text="OK"] {
+                background-color: #2ecc71;
+                color: white;
+            }
+            QPushButton[text="OK"]:hover {
+                background-color: #27ae60;
+            }
+            QPushButton[text="Cancel"] {
+                background-color: #e74c3c;
+                color: white;
+            }
+            QPushButton[text="Cancel"]:hover {
+                background-color: #c0392b;
+            }
+            QPushButton[text="Apply"] {
+                background-color: #3498db;
+                color: white;
+            }
+            QPushButton[text="Apply"]:hover {
+                background-color: #2980b9;
+            }
+        """)
         main_layout.addWidget(button_box)
 
-        # Set window sizing - after UI is created
-        if not sys.platform.startswith('win'):
-            self.resize(900, 700)
-        else:
-            self.setWindowFlags(self.windowFlags() | Qt.MSWindowsFixedSizeDialogHint)
+        # Select first item by default
+        self.tree_widget.setCurrentItem(self.tree_widget.topLevelItem(0))
+        self._on_tree_item_clicked(self.tree_widget.topLevelItem(0))
+
+        # Set splitter sizing
+        splitter.setStretchFactor(1, 1)  # Make the right side stretch more
+        splitter.setSizes([250, self.width() - 250])  # Initial split position
 
         # Set application icon
         try:
@@ -99,11 +323,36 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.warning(f"Could not set window icon: {e}")
         
-    def _create_audio_tab(self):
-        """Create audio settings tab"""
-        audio_tab = QWidget()
-        audio_tab.setObjectName("audio_tab")
-        layout = QVBoxLayout(audio_tab)
+    def _on_tree_item_clicked(self, item):
+        """Handle tree item selection"""
+        page_name = item.text(0)
+        self._show_page(page_name)
+
+    def _show_page(self, page_name):
+        """Show the selected settings page"""
+        # Hide current page if exists
+        if self.current_page:
+            self.current_page.hide()
+            self.settings_layout.removeWidget(self.current_page)
+
+        # Show selected page
+        page = self.pages.get(page_name)
+        if page:
+            self.settings_layout.addWidget(page)
+            page.show()
+            self.current_page = page
+
+    def _create_page(self, name):
+        """Create a new page widget"""
+        page = QWidget()
+        page.setLayout(QVBoxLayout())
+        self.pages[name] = page
+        return page
+
+    def _create_audio_page(self):
+        """Create audio settings page"""
+        page = self._create_page("Audio")
+        layout = page.layout()
 
         # Audio device selection
         device_group = QGroupBox("Audio Devices")
@@ -120,14 +369,8 @@ class SettingsDialog(QDialog):
         self.output_combo.setObjectName("output_combo")
         self.output_combo.addItem("System Default", -1)
         device_layout.addRow("Output Device:", self.output_combo)
-        
-        device_group.setLayout(device_layout)
-        layout.addWidget(device_group)
 
-        # Add the tab to the tab widget
-        self.tab_widget.addTab(audio_tab, "Audio")
-
-        # Audio parameters
+        # Add the rest of the audio settings
         self.sample_rate_combo = QComboBox()
         for rate in [8000, 11025, 22050, 44100, 48000]:
             self.sample_rate_combo.addItem(f"{rate} Hz", rate)
@@ -174,22 +417,20 @@ class SettingsDialog(QDialog):
         refresh_button.clicked.connect(self._refresh_audio_devices)
         layout.addWidget(refresh_button)
 
-        # Add stretch
+        # Add stretch at the end
         layout.addStretch(1)
 
-        # Add to tab widget
-        
-    def _create_modem_tab(self):
-        """Create modem settings tab"""
-        modem_tab = QWidget()
-        layout = QVBoxLayout(modem_tab)
-        layout.setSpacing(10)  # Add more spacing between elements
-        layout.setContentsMargins(10, 10, 10, 10)  # Add margins around the layout
+    def _create_modem_page(self):
+        """Create modem settings page"""
+        page = self._create_page("Modem")
+        layout = page.layout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
 
         # Communication settings
         comm_group = QGroupBox("Communication Settings")
         comm_layout = QFormLayout()
-        comm_layout.setSpacing(8)  # Add more spacing between form elements
+        comm_layout.setSpacing(8)
 
         # Mode selection
         self.mode_combo = QComboBox()
@@ -220,7 +461,8 @@ class SettingsDialog(QDialog):
         self.run_ardop_mode_combo.addItem("Run ARDOP Internally", "internal")
         self.run_ardop_mode_combo.addItem("Use External ARDOP", "external")
         self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
-        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)        # Network settings group
+        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)        
+        # Network settings group
         self.network_group = QGroupBox("Network Settings")
         network_layout = QFormLayout()
         network_layout.setSpacing(8)  # Add more spacing
@@ -307,7 +549,7 @@ class SettingsDialog(QDialog):
         self.consolelog_spin = QSpinBox()
         self.consolelog_spin.setRange(1, 6)
         self.consolelog_spin.setToolTip("Console log verbosity (1-6, 1=most verbose)")
-        ardop_layout.addRow("Console Log Level:", self.consolelog_spin)
+        ardop_layout.addRow("CW ID:", self.consolelog_spin)
 
         # Advanced options
         self.cwid_check = QCheckBox()
@@ -340,62 +582,204 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.ardop_group)        # Placeholder - removed spectrum settings (moved to Display tab)
 
         # Add stretch
+        layout.addStretch(1)        # Add to settings container
+        layout.addStretch(1)
+        
+    def _create_ardop_page(self):
+        """Create ARDOP settings page"""
+        page = self._create_page("ARDOP Settings")
+        layout = page.layout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # ARDOP settings group
+        ardop_group = QGroupBox("ARDOP Mode")
+        ardop_layout = QFormLayout()
+        ardop_layout.setSpacing(8)
+
+        # Internal/External ARDOP mode
+        self.run_ardop_mode_combo = QComboBox()
+        self.run_ardop_mode_combo.addItem("Run ARDOP Internally", "internal")
+        self.run_ardop_mode_combo.addItem("Use External ARDOP", "external")
+        self.run_ardop_mode_combo.currentIndexChanged.connect(self._on_ardop_mode_changed)
+        ardop_layout.addRow("ARDOP Mode:", self.run_ardop_mode_combo)
+
+        # Network settings group
+        self.network_group = QGroupBox("Network Settings")
+        network_layout = QFormLayout()
+        network_layout.setSpacing(8)
+        network_layout.setContentsMargins(10, 10, 10, 10)
+
+        # IP Address
+        self.ardop_ip_edit = QLineEdit()
+        self.ardop_ip_edit.setPlaceholderText("127.0.0.1")
+        self.ardop_ip_edit.setToolTip("IP address of external ARDOP modem")
+        self.ardop_ip_edit.setMinimumWidth(200)
+        network_layout.addRow("ARDOP IP:", self.ardop_ip_edit)
+
+        # Port
+        self.ardop_port_spin = QSpinBox()
+        self.ardop_port_spin.setRange(1, 65535)
+        self.ardop_port_spin.setValue(8515)
+        self.ardop_port_spin.setToolTip("Port number of external ARDOP modem")
+        network_layout.addRow("ARDOP Port:", self.ardop_port_spin)
+
+        self.network_group.setLayout(network_layout)
+        ardop_layout.addWidget(self.network_group)
+
+        # Protocol Mode (ARQ, FEC, RXO)
+        self.protocol_mode_combo = QComboBox()
+        self.protocol_mode_combo.addItem("ARQ Mode", "ARQ")
+        self.protocol_mode_combo.addItem("FEC Mode", "FEC")
+        self.protocol_mode_combo.addItem("Receive Only", "RXO")
+        self.protocol_mode_combo.setToolTip("ARQ: Automatic Repeat Request - Connection mode\n"
+                                          "FEC: Forward Error Correction - Broadcast mode\n"
+                                          "RXO: Receive Only - No transmit")
+        ardop_layout.addRow("Protocol Mode:", self.protocol_mode_combo)
+
+        # ARQ timeout
+        self.arq_timeout_spin = QSpinBox()
+        self.arq_timeout_spin.setRange(30, 240)
+        self.arq_timeout_spin.setSingleStep(10)
+        self.arq_timeout_spin.setSuffix(" sec")
+        self.arq_timeout_spin.setToolTip("Time before ARQ connection times out if idle")
+        ardop_layout.addRow("ARQ Timeout:", self.arq_timeout_spin)
+
+        # FEC repeat settings
+        self.fec_repeats_spin = QSpinBox()
+        self.fec_repeats_spin.setRange(0, 5)
+        self.fec_repeats_spin.setToolTip("Number of times to repeat FEC transmissions (0-5)")
+        ardop_layout.addRow("FEC Repeats:", self.fec_repeats_spin)
+
+        # Leader length
+        self.leader_spin = QSpinBox()
+        self.leader_spin.setRange(120, 2500)
+        self.leader_spin.setSingleStep(10)
+        self.leader_spin.setSuffix(" ms")
+        self.leader_spin.setToolTip("Sync leader length in milliseconds (120-2500)")
+        ardop_layout.addRow("Leader Length:", self.leader_spin)
+
+        # Trailer length
+        self.trailer_spin = QSpinBox()
+        self.trailer_spin.setRange(0, 200)
+        self.trailer_spin.setSingleStep(5)
+        self.trailer_spin.setSuffix(" ms")
+        self.trailer_spin.setToolTip("Trailer tone length in milliseconds (0-200)")
+        ardop_layout.addRow("Trailer Length:", self.trailer_spin)
+
+        # Squelch level
+        self.squelch_spin = QSpinBox()
+        self.squelch_spin.setRange(1, 10)
+        self.squelch_spin.setToolTip("Squelch level (1-10), lower is more sensitive")
+        ardop_layout.addRow("Squelch:", self.squelch_spin)
+
+        # Busy detection
+        self.busydet_spin = QSpinBox()
+        self.busydet_spin.setRange(0, 9)
+        self.busydet_spin.setToolTip("Busy detection sensitivity (0=most sensitive, 9=least sensitive)")
+        ardop_layout.addRow("Busy Detection:", self.busydet_spin)
+
+        # Extra delay
+        self.extradelay_spin = QSpinBox()
+        self.extradelay_spin.setRange(0, 1000)
+        self.extradelay_spin.setSingleStep(10)
+        self.extradelay_spin.setSuffix(" ms")
+        self.extradelay_spin.setToolTip("Extra delay between RX and TX")
+        ardop_layout.addRow("Extra Delay:", self.extradelay_spin)
+
+        # Console log verbosity
+        self.consolelog_spin = QSpinBox()
+        self.consolelog_spin.setRange(1, 6)
+        self.consolelog_spin.setToolTip("Console log verbosity (1-6, 1=most verbose)")
+        ardop_layout.addRow("CW ID:", self.consolelog_spin)
+
+        # Advanced options
+        self.cwid_check = QCheckBox()
+        self.cwid_check.setToolTip("Send CW ID after IDFRAME")
+        ardop_layout.addRow("CW ID:", self.cwid_check)
+
+        self.fsk_only_check = QCheckBox()
+        self.fsk_only_check.setToolTip("Use only FSK modes (no PSK or QAM)")
+        ardop_layout.addRow("FSK Only:", self.fsk_only_check)
+
+        self.use600_check = QCheckBox()
+        self.use600_check.setToolTip("Enable 600 baud modes for FM/2m")
+        ardop_layout.addRow("Use 600 Baud:", self.use600_check)
+
+        self.faststart_check = QCheckBox()
+        self.faststart_check.setToolTip("Start ARQ with faster speed frames")
+        ardop_layout.addRow("Fast Start:", self.faststart_check)
+
+        # Custom commands
+        self.custom_commands = QLineEdit()
+        self.custom_commands.setToolTip("Additional semicolon-separated ARDOP commands")
+        ardop_layout.addRow("Custom Commands:", self.custom_commands)
+
+        # Add Reset to Defaults button
+        reset_button = QPushButton("Reset to Defaults")
+        reset_button.clicked.connect(self._reset_modem_settings)
+        ardop_layout.addRow("", reset_button)
+
+        ardop_group.setLayout(ardop_layout)
+        layout.addWidget(ardop_group)
         layout.addStretch(1)
 
-        # Add to tab widget
-        self.tab_widget.addTab(modem_tab, "Modem")
+        # Add to settings container
+        self.settings_layout.addWidget(page)
 
-    def _create_station_tab(self):
-        """Create station settings tab"""
-        station_tab = QWidget()
-        layout = QVBoxLayout(station_tab)
-        # ARDOP advanced settings
-        advanced_group = QGroupBox("Station Details")
-        advanced_layout = QFormLayout()
+    def _create_station_page(self):
+        """Create station settings page"""
+        page = self._create_page("Station")
+        layout = page.layout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Station details group
+        station_group = QGroupBox("Station Details")
+        station_layout = QFormLayout()
+        station_layout.setSpacing(8)
+
         self.callsign_edit = QLineEdit()
         self.callsign_edit.setMaxLength(10)
-        # Check if licensed callsign is present - if so, disable editing
         self.callsign_edit.setText(self.config.get('user', 'callsign', '').upper())
         self.callsign_edit.setToolTip("Callsign is locked by your license")
-        advanced_layout.addRow("Callsign:", self.callsign_edit)
+        station_layout.addRow("Callsign:", self.callsign_edit)
 
         self.fullname_edit = QLineEdit()
         self.fullname_edit.setMaxLength(50)
         self.fullname_edit.setText(self.config.get('user', 'fullname', ''))
         self.fullname_edit.setToolTip("Your full name")
-        advanced_layout.addRow("Full Name:", self.fullname_edit)
+        station_layout.addRow("Full Name:", self.fullname_edit)
 
         self.email_edit = QLineEdit()
         self.email_edit.setMaxLength(100)
         self.email_edit.setText(self.config.get('user', 'email', ''))
         self.email_edit.setToolTip("Your email address")
-        advanced_layout.addRow("Email:", self.email_edit)
+        station_layout.addRow("Email:", self.email_edit)
 
         self.city_edit = QLineEdit()
         self.city_edit.setMaxLength(50)
         self.city_edit.setText(self.config.get('user', 'city', ''))
         self.city_edit.setToolTip("Your city or location")
-        advanced_layout.addRow("City:", self.city_edit)
+        station_layout.addRow("City:", self.city_edit)
 
         self.grid_square_edit = QLineEdit()
         self.grid_square_edit.setMaxLength(6)
         self.grid_square_edit.setText(self.config.get('user', 'grid_square', ''))
         self.grid_square_edit.setToolTip("Grid square is the location of your station")
-        advanced_layout.addRow("Grid Square:", self.grid_square_edit)
+        station_layout.addRow("Grid Square:", self.grid_square_edit)
 
-        advanced_group.setLayout(advanced_layout)
-        layout.addWidget(advanced_group)
-
-        # Add stretch
+        station_group.setLayout(station_layout)
+        layout.addWidget(station_group)
         layout.addStretch(1)
 
-        # Add to tab widget
-        self.tab_widget.addTab(station_tab, "Station")
-
-    def _create_hamlib_tab(self):
-        """Create HAMLIB settings tab"""
-        hamlib_tab = QWidget()
-        layout = QVBoxLayout(hamlib_tab)
+        # Add to settings container
+        self.settings_layout.addWidget(page)
+        
+    def _create_hamlib_page(self):
+        """Create HAMLIB settings page"""
+        page = self._create_page("HAMLIB")
+        layout = page.layout()
 
         # Enable HAMLIB
         self.hamlib_enabled_check = QCheckBox("Enable HAMLIB Rig Control")
@@ -426,37 +810,16 @@ class SettingsDialog(QDialog):
         hamlib_group.setLayout(hamlib_layout)
         layout.addWidget(hamlib_group)
 
-        # PTT test
-        ptt_group = QGroupBox("PTT Test")
-        ptt_layout = QHBoxLayout()
-
-        self.ptt_on_button = QPushButton("PTT ON")
-        self.ptt_off_button = QPushButton("PTT OFF")
-
-        self.ptt_on_button.clicked.connect(self._ptt_on)
-        self.ptt_off_button.clicked.connect(self._ptt_off)
-
-        ptt_layout.addWidget(self.ptt_on_button)
-        ptt_layout.addWidget(self.ptt_off_button)
-
-        ptt_group.setLayout(ptt_layout)
-        layout.addWidget(ptt_group)
-
-        # Port scan
-        scan_button = QPushButton("Scan for Serial Ports")
-        scan_button.clicked.connect(self._scan_serial_ports)
-        layout.addWidget(scan_button)
-
         # Add stretch
         layout.addStretch(1)
 
-        # Add to tab widget
-        self.tab_widget.addTab(hamlib_tab, "HAMLIB")
+        # Add to settings container
+        self.settings_layout.addWidget(page)
 
-    def _create_ui_tab(self):
-        """Create UI settings tab"""
-        ui_tab = QWidget()
-        layout = QVBoxLayout(ui_tab)
+    def _create_display_page(self):
+        """Create display settings page"""
+        page = self._create_page("Display")
+        layout = page.layout()
 
         # UI settings
         ui_group = QGroupBox("User Interface")
@@ -543,18 +906,17 @@ class SettingsDialog(QDialog):
         layout.addWidget(spectrum_group)
 
         # Add stretch
+        layout.addStretch(1)        # Add stretch at the end
         layout.addStretch(1)
 
-        # Add to tab widget
-        self.tab_widget.addTab(ui_tab, "Display") 
-    
-    def _create_ardop_advanced_tab(self):
-        """Create advanced ARDOP settings tab"""
-        ardop_tab = QWidget()
-        layout = QVBoxLayout(ardop_tab)
-
-        # Add tab to widget
-        self.tab_widget.addTab(ardop_tab, "ARDOP Advanced")
+        # Hide all pages initially
+        for page in self.pages.values():
+            page.setVisible(False)
+        
+    def _create_ardop_advanced_page(self):
+        """Create advanced ARDOP settings page"""
+        page = self._create_page("ARDOP Advanced")
+        layout = page.layout()
 
         # ARQ Settings Group
         arq_group = QGroupBox("ARQ Settings")
@@ -679,10 +1041,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(debug_group)
 
         # Add stretch
+        layout.addStretch(1)        # Add stretch at the end
         layout.addStretch(1)
-
-        # Add to tab widget
-        self.tab_widget.addTab(ardop_tab, "ARDOP Advanced")    
     
     def _on_ardop_mode_changed(self, *args):
         """Handle ARDOP mode change"""
@@ -690,6 +1050,15 @@ class SettingsDialog(QDialog):
         is_external = self.run_ardop_mode_combo.currentData() == "external"
         if hasattr(self, 'network_group'):
             self.network_group.setEnabled(is_external)
+            
+        # Update tree item visibility
+        for i in range(self.tree_widget.topLevelItemCount()):
+            item = self.tree_widget.topLevelItem(i)
+            if item.text(0) == "ARDOP Settings":
+                for j in range(item.childCount()):
+                    child = item.child(j)
+                    if child.text(0) == "Network Settings":
+                        child.setHidden(not is_external)
 
     def _browse_log_dir(self):
         """Browse for log directory"""
@@ -1081,17 +1450,20 @@ class SettingsDialog(QDialog):
 
     def _on_mode_changed(self):
         """Handle modem mode change"""
-        # Show or hide ARDOP settings based on selected mode
         current_mode = self.mode_combo.currentData()
 
-        # Show ARDOP settings only when ARDOP is selected
-        self.ardop_group.setVisible(current_mode == "ARDOP")
+        # Show/hide ARDOP related items in the tree
+        for i in range(self.tree_widget.topLevelItemCount()):
+            item = self.tree_widget.topLevelItem(i)
+            if item.text(0) in ["ARDOP Settings", "ARDOP Advanced"]:
+                item.setHidden(current_mode != "ARDOP")
 
-        # Show/hide ARDOP advanced tab
-        for i in range(self.tab_widget.count()):
-            if self.tab_widget.tabText(i) == "ARDOP Advanced":
-                self.tab_widget.setTabVisible(i, current_mode == "ARDOP")
-                break
+        # If current page is ARDOP related and mode is not ARDOP,
+        # switch to Modem page
+        if current_mode != "ARDOP" and self.current_page:
+            current_name = [k for k, v in self.pages.items() if v == self.current_page][0]
+            if "ARDOP" in current_name:
+                self._show_page("Modem")
 
     def _reset_modem_settings(self):
         """Reset modem settings to defaults"""
