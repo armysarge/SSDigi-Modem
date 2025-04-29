@@ -7,6 +7,9 @@ import numpy as np
 # Import modem factory
 from ssdigi_modem.core.modems.factory import ModemFactory
 
+# Import FFT receiver for ARDOP
+from ssdigi_modem.core.modems.ardop_fft_receiver import ArdopFFTReceiver
+
 logger = logging.getLogger(__name__)
 
 class ModemManager:
@@ -28,16 +31,36 @@ class ModemManager:
         self.connected = self.active_modem.connected
         self.status = self.active_modem.status
 
+        # Initialize FFT receiver if ARDOP mode
+        self.fft_receiver = None
+        # use_external_fft is always True if mode is ARDOP
+        self.use_external_fft = self.mode.upper() == 'ARDOP'
+
+        if self.use_external_fft:
+            host = config.get('modem', 'ardop_host', '127.0.0.1')
+            port = config.get('modem', 'ardop_fft_port', 8515)
+            self.fft_receiver = ArdopFFTReceiver(host=host, port=port)
+            # FFT receiver will be started when connecting to modem
+
     def connect(self):
         """Connect to the modem - delegates to active modem implementation"""
         result = self.active_modem.connect()
         # Update local properties after connection
         self.connected = self.active_modem.connected
         self.status = self.active_modem.status
+
+        # Start FFT receiver if available
+        if self.fft_receiver and self.connected:
+            self.fft_receiver.start()
+
         return result
 
     def disconnect(self):
         """Disconnect from the modem - delegates to active modem implementation"""
+        # Stop FFT receiver if running
+        if self.fft_receiver:
+            self.fft_receiver.stop()
+
         result = self.active_modem.disconnect()
         # Update local properties after disconnection
         self.connected = self.active_modem.connected
@@ -72,6 +95,14 @@ class ModemManager:
 
     def get_fft_data(self):
         """Get current FFT data for spectrum display"""
+        # The use_external_fft flag is always True if mode is 'ARDOP'
+        # and we're using the FFT receiver in that case
+        if self.mode.upper() == 'ARDOP' and self.fft_receiver:
+            external_fft = self.fft_receiver.get_fft_data()
+            if external_fft is not None and self.fft_receiver.is_data_fresh():
+                return external_fft
+
+        # Fall back to modem's internal FFT if external not available
         return self.active_modem.get_fft_data()
 
     def send_text(self, text):
@@ -115,7 +146,21 @@ class ModemManager:
             self.center_freq = self.active_modem.center_freq
             self.callsign = self.active_modem.callsign
             self.connected = self.active_modem.connected
-            self.status = self.active_modem.status
+            self.status = self.active_modem.status            # Update FFT receiver
+            if self.fft_receiver:
+                self.fft_receiver.stop()
+                self.fft_receiver = None
+
+            # use_external_fft is always True if mode is ARDOP
+            self.use_external_fft = self.mode.upper() == 'ARDOP'
+
+            # Initialize FFT receiver if in ARDOP mode
+            if self.use_external_fft:
+                host = self.config.get('modem', 'ardop_host', '127.0.0.1')
+                port = self.config.get('modem', 'ardop_fft_port', 8515)
+                self.fft_receiver = ArdopFFTReceiver(host=host, port=port)
+                if self.connected:
+                    self.fft_receiver.start()
         else:
             # Mode is the same, just update settings
             self.active_modem.update_from_config()
@@ -123,7 +168,24 @@ class ModemManager:
             # Update local properties
             self.bandwidth = self.active_modem.bandwidth
             self.center_freq = self.active_modem.center_freq
-            self.callsign = self.active_modem.callsign
+            self.callsign = self.active_modem.callsign            # Check if external FFT setting should be updated (based on mode)
+            should_use_external_fft = self.mode.upper() == 'ARDOP'
+
+            if should_use_external_fft != self.use_external_fft:
+                self.use_external_fft = should_use_external_fft
+
+                if should_use_external_fft:
+                    # Create and start the FFT receiver for ARDOP
+                    host = self.config.get('modem', 'ardop_host', '127.0.0.1')
+                    port = self.config.get('modem', 'ardop_fft_port', 8515)
+                    self.fft_receiver = ArdopFFTReceiver(host=host, port=port)
+                    if self.connected:
+                        self.fft_receiver.start()
+                else:
+                    # Stop and remove the FFT receiver
+                    if self.fft_receiver:
+                        self.fft_receiver.stop()
+                        self.fft_receiver = None
 
         return True
 
