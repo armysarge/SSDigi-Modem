@@ -79,7 +79,7 @@ class ArdopFFTReceiver:
                 data, addr = self.socket.recvfrom(self.buffer_size)
 
                 # Process the data - look for FFT type
-                if data and len(data) > 3 and data[0] == ord('F'):
+                if data and len(data) > 3 and data[0] == ord('K'):
                     self._process_fft_data(data[1:])
 
             except socket.timeout:

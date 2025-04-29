@@ -49,7 +49,9 @@ class FFTVisualizer:
         # Counter for received packets
         self.packets_received = 0
         self.last_packets_counted = 0
-        self.last_count_time = time.time()    def update_plot(self, frame):
+        self.last_count_time = time.time()
+
+    def update_plot(self, frame):
         """Update function for animation"""
         fft_data = self.receiver.get_fft_data()
 
