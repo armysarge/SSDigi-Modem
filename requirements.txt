@@ -8,3 +8,4 @@ pyhamtools
 pyinstaller
 cryptography
 sounddevice
+pyqtgraph
