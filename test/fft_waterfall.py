@@ -7,13 +7,11 @@ import sys
 import time
 import logging
 import argparse
+import socket
+import struct
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-
-# Import the ArdopFFTReceiver class
-sys.path.append('.')  # Add current directory to path
-from ssdigi_modem.core.modems.ardop_fft_receiver import ArdopFFTReceiver
 
 # Set up logging
 logging.basicConfig(
@@ -27,7 +25,8 @@ class WaterfallVisualizer:
 
     def __init__(self, host='127.0.0.1', port=8515, history_length=100):
         """Initialize the FFT waterfall visualizer"""
-        self.receiver = ArdopFFTReceiver(host=host, port=port)
+        self.host = host
+        self.port = port
         self.history_length = history_length
         self.waterfall_data = None
 
@@ -60,31 +59,65 @@ class WaterfallVisualizer:
         # Adjust layout
         plt.tight_layout()
 
-        # Initialize the receiver
-        self.receiver.start()
+        # Set up UDP socket
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.bind((host, port))
+        self.socket.settimeout(0.05)  # 50ms timeout for animation refresh
+
         logger.info(f"Waiting for FFT data from ARDOP on {host}:{port}...")
 
         # Counter for received packets
         self.packets_received = 0
 
+    def receive_fft_data(self):
+        """Receive FFT data from UDP socket"""
+        try:
+            data, addr = self.socket.recvfrom(16384)
+
+            # Process the data - look for FFT type
+            # Note: Using 'P' for Power spectrum data
+            if data and len(data) > 3 and data[0] == ord('W'):
+                data = data[1:]  # Skip the type byte
+
+                # Extract number of samples and data
+                if len(data) >= 2:
+                    num_samples = (data[0] << 8) | data[1]
+
+                    if len(data) >= 2 + num_samples * 4:  # 4 bytes per float
+                        # Extract float values
+                        fft_values = []
+                        for i in range(num_samples):
+                            offset = 2 + i * 4
+                            value = struct.unpack('f', data[offset:offset+4])[0]
+                            fft_values.append(value)
+
+                        # Store the FFT data
+                        self.current_fft = np.array(fft_values)
+                        self.packets_received += 1
+                        return True
+
+        except socket.timeout:
+            # This is normal, just continue
+            pass
+        except Exception as e:
+            logger.error(f"Error receiving FFT data: {str(e)}")
+
+        return False
+
     def update_plot(self, frame):
         """Update function for animation"""
-        fft_data = self.receiver.get_fft_data()
-
-        if fft_data is not None:
-            # Count packets
-            self.packets_received += 1
+        # Receive new data
+        if self.receive_fft_data():
+            # Normalize FFT data (values from 0 to 1)
+            max_val = np.max(self.current_fft)
+            if max_val > 0:
+                normalized_data = self.current_fft / max_val
+            else:
+                normalized_data = self.current_fft
 
             # Initialize waterfall data if this is the first packet
             if self.waterfall_data is None:
-                self.waterfall_data = np.zeros((self.history_length, len(fft_data)))
-
-            # Normalize FFT data (values from 0 to 1)
-            max_val = np.max(fft_data)
-            if max_val > 0:
-                normalized_data = fft_data / max_val
-            else:
-                normalized_data = fft_data
+                self.waterfall_data = np.zeros((self.history_length, len(normalized_data)))
 
             # Update line plot
             if len(self.line.get_xdata()) == 0:
@@ -106,9 +139,8 @@ class WaterfallVisualizer:
             # Update title with status
             self.ax1.set_title(f'ARDOP FFT Data - {len(normalized_data)} points - {self.packets_received} packets received')
 
-            return self.line, self.waterfall_img
-
-        return self.line, self.waterfall_img
+        # Must return the artists that were updated
+        return [self.line, self.waterfall_img]
 
     def run(self):
         """Run the visualizer with animation"""
@@ -118,7 +150,8 @@ class WaterfallVisualizer:
                 self.fig,
                 self.update_plot,
                 interval=50,
-                blit=True
+                blit=True,
+                save_count=100  # Limit cache to 100 frames
             )
 
             # Show the plot
@@ -126,7 +159,7 @@ class WaterfallVisualizer:
 
         finally:
             # Clean up when window is closed
-            self.receiver.stop()
+            self.socket.close()
             logger.info("FFT visualizer stopped")
 
 

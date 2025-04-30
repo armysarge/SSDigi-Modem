@@ -2,7 +2,7 @@
 Modem factory module for creating appropriate modem instances based on configuration
 """
 import logging
-from ssdigi_modem.core.modems.ardop_modem import ArdopModem
+from ssdigi_modem.core.modems.ardop.ardop_modem import ArdopModem
 
 logger = logging.getLogger(__name__)
 

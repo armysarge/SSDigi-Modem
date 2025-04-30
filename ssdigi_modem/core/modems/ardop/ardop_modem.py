@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 from ssdigi_modem.core.modems.base_modem import BaseModem
-from ssdigi_modem.core.modems.ardop_modem_commands import generate_host_commands
+from ssdigi_modem.core.modems.ardop.ardop_modem_commands import generate_host_commands
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,10 @@ class ArdopModem(BaseModem):
         except Exception as e:
             logger.exception(f"Error disconnecting ARDOP modem: {e}")
             return False
+
+    def get_spectrum_data(self):
+        """Get current spectrum data for display - wrapper for get_fft_data method"""
+        return self.get_fft_data()
 
     def get_fft_data(self):
         """Get current FFT data for spectrum display"""
@@ -478,8 +482,8 @@ class ArdopModem(BaseModem):
 
             # If we got here, no binary was found
             logger.error("ARDOP binary not found in any location")
-            return None    
-    
+            return None
+
     def _start_ardop_process(self):
         """Start the ARDOP binary as a separate process with appropriate parameters"""
         try:
@@ -645,8 +649,8 @@ class ArdopModem(BaseModem):
 
         except Exception as e:
             logger.exception(f"Error starting ARDOP process: {e}")
-            return False    
-    
+            return False
+
     def _connect_to_ardop_sockets(self):
         """Connect to ARDOP's command and data TCP sockets"""
         import socket

@@ -296,7 +296,7 @@ class MainWindow(QMainWindow):
     def update_spectrum(self):
         """Update spectrum and waterfall with new data"""
         # Get FFT data from modem
-        fft_data = self.modem_manager.get_fft_data()
+        fft_data = self.modem_manager.get_spectrum_data()
 
         # If no FFT data, try to use latest input audio
         if fft_data is None:

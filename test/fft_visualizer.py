@@ -7,13 +7,11 @@ import sys
 import time
 import logging
 import argparse
+import socket
+import struct
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-
-# Import the ArdopFFTReceiver class
-sys.path.append('.')  # Add current directory to path
-from ssdigi_modem.core.modems.ardop_fft_receiver import ArdopFFTReceiver
 
 # Set up logging
 logging.basicConfig(
@@ -27,7 +25,8 @@ class FFTVisualizer:
 
     def __init__(self, host='127.0.0.1', port=8515):
         """Initialize the FFT visualizer"""
-        self.receiver = ArdopFFTReceiver(host=host, port=port)
+        self.host = host
+        self.port = port
 
         # Create figure for visualization
         self.fig, self.ax = plt.subplots(figsize=(12, 6))
@@ -42,8 +41,11 @@ class FFTVisualizer:
         # X axis will be set once we know the FFT size
         self.ax.set_ylim(0, 1)  # Will auto-adjust later
 
-        # Initialize the receiver
-        self.receiver.start()
+        # Set up UDP socket
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.bind((host, port))
+        self.socket.settimeout(0.05)  # 50ms timeout for animation refresh
+
         logger.info(f"Waiting for FFT data from ARDOP on {host}:{port}...")
 
         # Counter for received packets
@@ -51,28 +53,61 @@ class FFTVisualizer:
         self.last_packets_counted = 0
         self.last_count_time = time.time()
 
+        # Current FFT data
+        self.fft_data = None
+
+    def receive_fft_data(self):
+        """Receive FFT data from UDP socket"""
+        try:
+            data, addr = self.socket.recvfrom(16384)
+
+            # Process the data - look for FFT type
+            # Note: Using 'P' for Power spectrum data
+            if data and len(data) > 3 and data[0] == ord('P'):
+                data = data[1:]  # Skip the type byte
+
+                # Extract number of samples and data
+                if len(data) >= 2:
+                    num_samples = (data[0] << 8) | data[1]
+
+                    if len(data) >= 2 + num_samples * 4:  # 4 bytes per float
+                        # Extract float values
+                        fft_values = []
+                        for i in range(num_samples):
+                            offset = 2 + i * 4
+                            value = struct.unpack('f', data[offset:offset+4])[0]
+                            fft_values.append(value)
+
+                        # Store the FFT data
+                        self.fft_data = np.array(fft_values)
+                        self.packets_received += 1
+
+                        # Calculate packets per second every 5 seconds
+                        current_time = time.time()
+                        if current_time - self.last_count_time >= 5:
+                            packets_per_second = (self.packets_received - self.last_packets_counted) / (current_time - self.last_count_time)
+                            logger.info(f"Receiving {packets_per_second:.2f} FFT packets per second")
+                            self.last_packets_counted = self.packets_received
+                            self.last_count_time = current_time
+
+        except socket.timeout:
+            # This is normal, just continue
+            pass
+        except Exception as e:
+            logger.error(f"Error receiving FFT data: {str(e)}")
+
     def update_plot(self, frame):
         """Update function for animation"""
-        fft_data = self.receiver.get_fft_data()
+        # Receive new data
+        self.receive_fft_data()
 
-        if fft_data is not None:
-            # Count packets
-            self.packets_received += 1
-
-            # Calculate packets per second every 5 seconds
-            current_time = time.time()
-            if current_time - self.last_count_time >= 5:
-                packets_per_second = (self.packets_received - self.last_packets_counted) / (current_time - self.last_count_time)
-                logger.info(f"Receiving {packets_per_second:.2f} FFT packets per second")
-                self.last_packets_counted = self.packets_received
-                self.last_count_time = current_time
-
+        if self.fft_data is not None:
             # Normalize if needed (values should be from 0 to 1 for clean display)
-            max_val = np.max(fft_data)
+            max_val = np.max(self.fft_data)
             if max_val > 0:
-                normalized_data = fft_data / max_val
+                normalized_data = self.fft_data / max_val
             else:
-                normalized_data = fft_data
+                normalized_data = self.fft_data
 
             # Set x-axis range on first valid data
             if len(self.line.get_xdata()) == 0:
@@ -86,12 +121,8 @@ class FFTVisualizer:
             # Update title with status
             self.ax.set_title(f'ARDOP FFT Data - {len(normalized_data)} points - {self.packets_received} packets received')
 
-            # Return the artist that was updated
-            return [self.line]
-
-        # Always return the artist, even if no update was made
+        # Must return the artists that were updated
         return [self.line]
-
 
     def run(self):
         """Run the visualizer with animation"""
@@ -102,7 +133,7 @@ class FFTVisualizer:
                 self.update_plot,
                 interval=50,  # Update every 50ms
                 blit=True,
-                save_count=100  # Limit the cache to 100 frames
+                save_count=100  # Limit cache to 100 frames
             )
 
             # Show the plot (this blocks until window is closed)
@@ -110,7 +141,7 @@ class FFTVisualizer:
 
         finally:
             # Clean up when window is closed
-            self.receiver.stop()
+            self.socket.close()
             logger.info("FFT visualizer stopped")
 
 
